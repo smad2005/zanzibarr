@@ -194,5 +194,36 @@
     "placeholders": {
       "count": { "type": "int" }
     }
-  }
+  },
+  "rssCard": "RSS-ленты",
+  "rssCardHint": "Ленты и сохранённые поисковые теги",
+  "rssTitle": "RSS",
+  "rssFeeds": "Ленты",
+  "rssTags": "Поисковые теги",
+  "rssAddFeed": "Добавить ленту",
+  "rssEditFeed": "Изменить ленту",
+  "rssAddTag": "Добавить тег",
+  "rssEditTag": "Изменить тег",
+  "rssFeedName": "Название",
+  "rssFeedUrl": "Адрес ленты",
+  "rssTagName": "Название тега",
+  "rssTagPattern": "Текст поиска",
+  "rssTagModeContains": "Вхождение",
+  "rssTagModeRegex": "Regex",
+  "rssTagAllFeeds": "Все ленты",
+  "rssInvalidRegex": "Некорректное регулярное выражение",
+  "rssRefresh": "Обновить",
+  "rssPlay": "Проиграть",
+  "rssEdit": "Изменить",
+  "rssDelete": "Удалить",
+  "rssSave": "Сохранить",
+  "rssCancel": "Отмена",
+  "rssNoFeeds": "Добавьте RSS-ленту, чтобы начать",
+  "rssSelectSource": "Выберите ленту или тег",
+  "rssNoItems": "Нет записей",
+  "rssFilter": "Фильтр по названию",
+  "rssFilterClose": "Закрыть фильтр",
+  "rssFilterHint": "Фильтр по названию…",
+  "rssDownloadNzb": "Скачать NZB",
+  "rssSaved": "Сохранено: {path}"
 }

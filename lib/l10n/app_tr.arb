@@ -227,5 +227,36 @@
     "placeholders": {
       "count": { "type": "int" }
     }
-  }
+  },
+  "rssCard": "RSS beslemeleri",
+  "rssCardHint": "Beslemeler ve kayıtlı arama etiketleri",
+  "rssTitle": "RSS",
+  "rssFeeds": "Beslemeler",
+  "rssTags": "Arama etiketleri",
+  "rssAddFeed": "Besleme ekle",
+  "rssEditFeed": "Beslemeyi düzenle",
+  "rssAddTag": "Etiket ekle",
+  "rssEditTag": "Etiketi düzenle",
+  "rssFeedName": "Ad",
+  "rssFeedUrl": "Besleme adresi",
+  "rssTagName": "Etiket adı",
+  "rssTagPattern": "Arama metni",
+  "rssTagModeContains": "İçerir",
+  "rssTagModeRegex": "Regex",
+  "rssTagAllFeeds": "Tüm beslemeler",
+  "rssInvalidRegex": "Geçersiz düzenli ifade",
+  "rssRefresh": "Yenile",
+  "rssPlay": "Oynat",
+  "rssEdit": "Düzenle",
+  "rssDelete": "Sil",
+  "rssSave": "Kaydet",
+  "rssCancel": "Vazgeç",
+  "rssNoFeeds": "Başlamak için bir RSS beslemesi ekleyin",
+  "rssSelectSource": "Bir besleme ya da etiket seçin",
+  "rssNoItems": "Öğe yok",
+  "rssFilter": "Başlığa göre süz",
+  "rssFilterClose": "Süzgeci kapat",
+  "rssFilterHint": "Başlığa göre süz…",
+  "rssDownloadNzb": "NZB indir",
+  "rssSaved": "Kaydedildi: {path}"
 }

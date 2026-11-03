@@ -1399,6 +1399,192 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} parts'**
   String entryParts(int count);
+
+  /// No description provided for @rssCard.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS feeds'**
+  String get rssCard;
+
+  /// No description provided for @rssCardHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse feeds and saved search tags'**
+  String get rssCardHint;
+
+  /// No description provided for @rssTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS'**
+  String get rssTitle;
+
+  /// No description provided for @rssFeeds.
+  ///
+  /// In en, this message translates to:
+  /// **'Feeds'**
+  String get rssFeeds;
+
+  /// No description provided for @rssTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Search tags'**
+  String get rssTags;
+
+  /// No description provided for @rssAddFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Add feed'**
+  String get rssAddFeed;
+
+  /// No description provided for @rssEditFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit feed'**
+  String get rssEditFeed;
+
+  /// No description provided for @rssAddTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Add tag'**
+  String get rssAddTag;
+
+  /// No description provided for @rssEditTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit tag'**
+  String get rssEditTag;
+
+  /// No description provided for @rssFeedName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get rssFeedName;
+
+  /// No description provided for @rssFeedUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Feed URL'**
+  String get rssFeedUrl;
+
+  /// No description provided for @rssTagName.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag name'**
+  String get rssTagName;
+
+  /// No description provided for @rssTagPattern.
+  ///
+  /// In en, this message translates to:
+  /// **'Search text'**
+  String get rssTagPattern;
+
+  /// No description provided for @rssTagModeContains.
+  ///
+  /// In en, this message translates to:
+  /// **'Contains'**
+  String get rssTagModeContains;
+
+  /// No description provided for @rssTagModeRegex.
+  ///
+  /// In en, this message translates to:
+  /// **'Regex'**
+  String get rssTagModeRegex;
+
+  /// No description provided for @rssTagAllFeeds.
+  ///
+  /// In en, this message translates to:
+  /// **'All feeds'**
+  String get rssTagAllFeeds;
+
+  /// No description provided for @rssInvalidRegex.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid regular expression'**
+  String get rssInvalidRegex;
+
+  /// No description provided for @rssRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get rssRefresh;
+
+  /// No description provided for @rssPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get rssPlay;
+
+  /// No description provided for @rssEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get rssEdit;
+
+  /// No description provided for @rssDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get rssDelete;
+
+  /// No description provided for @rssSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get rssSave;
+
+  /// No description provided for @rssCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get rssCancel;
+
+  /// No description provided for @rssNoFeeds.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an RSS feed to get started'**
+  String get rssNoFeeds;
+
+  /// No description provided for @rssSelectSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a feed or a tag'**
+  String get rssSelectSource;
+
+  /// No description provided for @rssNoItems.
+  ///
+  /// In en, this message translates to:
+  /// **'No items'**
+  String get rssNoItems;
+
+  /// No description provided for @rssFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by title'**
+  String get rssFilter;
+
+  /// No description provided for @rssFilterClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close filter'**
+  String get rssFilterClose;
+
+  /// No description provided for @rssFilterHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by title…'**
+  String get rssFilterHint;
+
+  /// No description provided for @rssDownloadNzb.
+  ///
+  /// In en, this message translates to:
+  /// **'Download NZB'**
+  String get rssDownloadNzb;
+
+  /// No description provided for @rssSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved: {path}'**
+  String rssSaved(String path);
 }
 
 class _AppLocalizationsDelegate

@@ -740,4 +740,99 @@ class AppLocalizationsTr extends AppLocalizations {
   String entryParts(int count) {
     return '$count parça';
   }
+
+  @override
+  String get rssCard => 'RSS beslemeleri';
+
+  @override
+  String get rssCardHint => 'Beslemeler ve kayıtlı arama etiketleri';
+
+  @override
+  String get rssTitle => 'RSS';
+
+  @override
+  String get rssFeeds => 'Beslemeler';
+
+  @override
+  String get rssTags => 'Arama etiketleri';
+
+  @override
+  String get rssAddFeed => 'Besleme ekle';
+
+  @override
+  String get rssEditFeed => 'Beslemeyi düzenle';
+
+  @override
+  String get rssAddTag => 'Etiket ekle';
+
+  @override
+  String get rssEditTag => 'Etiketi düzenle';
+
+  @override
+  String get rssFeedName => 'Ad';
+
+  @override
+  String get rssFeedUrl => 'Besleme adresi';
+
+  @override
+  String get rssTagName => 'Etiket adı';
+
+  @override
+  String get rssTagPattern => 'Arama metni';
+
+  @override
+  String get rssTagModeContains => 'İçerir';
+
+  @override
+  String get rssTagModeRegex => 'Regex';
+
+  @override
+  String get rssTagAllFeeds => 'Tüm beslemeler';
+
+  @override
+  String get rssInvalidRegex => 'Geçersiz düzenli ifade';
+
+  @override
+  String get rssRefresh => 'Yenile';
+
+  @override
+  String get rssPlay => 'Oynat';
+
+  @override
+  String get rssEdit => 'Düzenle';
+
+  @override
+  String get rssDelete => 'Sil';
+
+  @override
+  String get rssSave => 'Kaydet';
+
+  @override
+  String get rssCancel => 'Vazgeç';
+
+  @override
+  String get rssNoFeeds => 'Başlamak için bir RSS beslemesi ekleyin';
+
+  @override
+  String get rssSelectSource => 'Bir besleme ya da etiket seçin';
+
+  @override
+  String get rssNoItems => 'Öğe yok';
+
+  @override
+  String get rssFilter => 'Başlığa göre süz';
+
+  @override
+  String get rssFilterClose => 'Süzgeci kapat';
+
+  @override
+  String get rssFilterHint => 'Başlığa göre süz…';
+
+  @override
+  String get rssDownloadNzb => 'NZB indir';
+
+  @override
+  String rssSaved(String path) {
+    return 'Kaydedildi: $path';
+  }
 }

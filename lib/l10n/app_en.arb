@@ -355,5 +355,37 @@
     "placeholders": {
       "count": { "type": "int" }
     }
-  }
+  },
+  "rssCard": "RSS feeds",
+  "rssCardHint": "Browse feeds and saved search tags",
+  "rssTitle": "RSS",
+  "rssFeeds": "Feeds",
+  "rssTags": "Search tags",
+  "rssAddFeed": "Add feed",
+  "rssEditFeed": "Edit feed",
+  "rssAddTag": "Add tag",
+  "rssEditTag": "Edit tag",
+  "rssFeedName": "Name",
+  "rssFeedUrl": "Feed URL",
+  "rssTagName": "Tag name",
+  "rssTagPattern": "Search text",
+  "rssTagModeContains": "Contains",
+  "rssTagModeRegex": "Regex",
+  "rssTagAllFeeds": "All feeds",
+  "rssInvalidRegex": "Invalid regular expression",
+  "rssRefresh": "Refresh",
+  "rssPlay": "Play",
+  "rssEdit": "Edit",
+  "rssDelete": "Delete",
+  "rssSave": "Save",
+  "rssCancel": "Cancel",
+  "rssNoFeeds": "Add an RSS feed to get started",
+  "rssSelectSource": "Select a feed or a tag",
+  "rssNoItems": "No items",
+  "rssFilter": "Filter by title",
+  "rssFilterClose": "Close filter",
+  "rssFilterHint": "Filter by title…",
+  "rssDownloadNzb": "Download NZB",
+  "rssSaved": "Saved: {path}",
+  "@rssSaved": { "placeholders": { "path": { "type": "String" } } }
 }

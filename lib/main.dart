@@ -11,6 +11,7 @@ import 'l10n/app_localizations.dart';
 import 'player/gyuni_player_controls.dart' show formatPlayerDuration;
 import 'player/playback_history.dart';
 import 'player/player_screen.dart';
+import 'rss/rss_screen.dart';
 import 'update/update_service.dart';
 import 'search/search_screen.dart';
 import 'settings/indexer_settings.dart';
@@ -281,6 +282,8 @@ class ZanzibarrApp extends StatelessWidget {
   SnackBarThemeData _snackBarTheme(Color background) => SnackBarThemeData(
     behavior: SnackBarBehavior.floating,
     backgroundColor: background,
+    contentTextStyle: const TextStyle(color: Colors.white, fontSize: 13.5),
+    actionTextColor: _accent,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   );
 
@@ -531,6 +534,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openRss(BuildContext context) async {
+    await Navigator.of(context).push(_fadeRoute(const RssScreen()));
+    await _loadHistory();
+  }
+
   void _openSettings(BuildContext context) {
     Navigator.of(
       context,
@@ -558,21 +566,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            SafeArea(
-              child: Align(
-                alignment: Alignment.topRight,
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: _GlassIconButton(
-                    icon: Icons.settings_rounded,
-                    tooltip: AppLocalizations.of(
-                      context,
-                    ).providerSettingsTooltip,
-                    onPressed: () => _openSettings(context),
-                  ),
-                ),
-              ),
-            ),
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(28, 72, 28, 36),
@@ -614,6 +607,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         subtitle: l10n.searchIndexerCardHint,
                         onPressed: () => _openIndexerSearch(context),
                       ),
+                      const SizedBox(height: 12),
+                      _OpenMediaCard(
+                        busy: false,
+                        icon: Icons.rss_feed_rounded,
+                        title: l10n.rssCard,
+                        subtitle: l10n.rssCardHint,
+                        onPressed: () => _openRss(context),
+                      ),
                       if (_history.isNotEmpty) ...[
                         const SizedBox(height: 28),
                         _ContinueWatchingSection(
@@ -624,6 +625,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ],
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: _GlassIconButton(
+                    icon: Icons.settings_rounded,
+                    tooltip: AppLocalizations.of(
+                      context,
+                    ).providerSettingsTooltip,
+                    onPressed: () => _openSettings(context),
                   ),
                 ),
               ),

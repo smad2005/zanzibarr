@@ -744,4 +744,99 @@ class AppLocalizationsRu extends AppLocalizations {
   String entryParts(int count) {
     return '$count parts';
   }
+
+  @override
+  String get rssCard => 'RSS-ленты';
+
+  @override
+  String get rssCardHint => 'Ленты и сохранённые поисковые теги';
+
+  @override
+  String get rssTitle => 'RSS';
+
+  @override
+  String get rssFeeds => 'Ленты';
+
+  @override
+  String get rssTags => 'Поисковые теги';
+
+  @override
+  String get rssAddFeed => 'Добавить ленту';
+
+  @override
+  String get rssEditFeed => 'Изменить ленту';
+
+  @override
+  String get rssAddTag => 'Добавить тег';
+
+  @override
+  String get rssEditTag => 'Изменить тег';
+
+  @override
+  String get rssFeedName => 'Название';
+
+  @override
+  String get rssFeedUrl => 'Адрес ленты';
+
+  @override
+  String get rssTagName => 'Название тега';
+
+  @override
+  String get rssTagPattern => 'Текст поиска';
+
+  @override
+  String get rssTagModeContains => 'Вхождение';
+
+  @override
+  String get rssTagModeRegex => 'Regex';
+
+  @override
+  String get rssTagAllFeeds => 'Все ленты';
+
+  @override
+  String get rssInvalidRegex => 'Некорректное регулярное выражение';
+
+  @override
+  String get rssRefresh => 'Обновить';
+
+  @override
+  String get rssPlay => 'Проиграть';
+
+  @override
+  String get rssEdit => 'Изменить';
+
+  @override
+  String get rssDelete => 'Удалить';
+
+  @override
+  String get rssSave => 'Сохранить';
+
+  @override
+  String get rssCancel => 'Отмена';
+
+  @override
+  String get rssNoFeeds => 'Добавьте RSS-ленту, чтобы начать';
+
+  @override
+  String get rssSelectSource => 'Выберите ленту или тег';
+
+  @override
+  String get rssNoItems => 'Нет записей';
+
+  @override
+  String get rssFilter => 'Фильтр по названию';
+
+  @override
+  String get rssFilterClose => 'Закрыть фильтр';
+
+  @override
+  String get rssFilterHint => 'Фильтр по названию…';
+
+  @override
+  String get rssDownloadNzb => 'Скачать NZB';
+
+  @override
+  String rssSaved(String path) {
+    return 'Сохранено: $path';
+  }
 }

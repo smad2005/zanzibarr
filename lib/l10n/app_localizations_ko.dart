@@ -730,4 +730,99 @@ class AppLocalizationsKo extends AppLocalizations {
   String entryParts(int count) {
     return '$count parts';
   }
+
+  @override
+  String get rssCard => 'RSS feeds';
+
+  @override
+  String get rssCardHint => 'Browse feeds and saved search tags';
+
+  @override
+  String get rssTitle => 'RSS';
+
+  @override
+  String get rssFeeds => 'Feeds';
+
+  @override
+  String get rssTags => 'Search tags';
+
+  @override
+  String get rssAddFeed => 'Add feed';
+
+  @override
+  String get rssEditFeed => 'Edit feed';
+
+  @override
+  String get rssAddTag => 'Add tag';
+
+  @override
+  String get rssEditTag => 'Edit tag';
+
+  @override
+  String get rssFeedName => 'Name';
+
+  @override
+  String get rssFeedUrl => 'Feed URL';
+
+  @override
+  String get rssTagName => 'Tag name';
+
+  @override
+  String get rssTagPattern => 'Search text';
+
+  @override
+  String get rssTagModeContains => 'Contains';
+
+  @override
+  String get rssTagModeRegex => 'Regex';
+
+  @override
+  String get rssTagAllFeeds => 'All feeds';
+
+  @override
+  String get rssInvalidRegex => 'Invalid regular expression';
+
+  @override
+  String get rssRefresh => 'Refresh';
+
+  @override
+  String get rssPlay => 'Play';
+
+  @override
+  String get rssEdit => 'Edit';
+
+  @override
+  String get rssDelete => 'Delete';
+
+  @override
+  String get rssSave => 'Save';
+
+  @override
+  String get rssCancel => 'Cancel';
+
+  @override
+  String get rssNoFeeds => 'Add an RSS feed to get started';
+
+  @override
+  String get rssSelectSource => 'Select a feed or a tag';
+
+  @override
+  String get rssNoItems => 'No items';
+
+  @override
+  String get rssFilter => 'Filter by title';
+
+  @override
+  String get rssFilterClose => 'Close filter';
+
+  @override
+  String get rssFilterHint => 'Filter by title…';
+
+  @override
+  String get rssDownloadNzb => 'Download NZB';
+
+  @override
+  String rssSaved(String path) {
+    return 'Saved: $path';
+  }
 }
