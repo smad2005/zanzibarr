@@ -224,7 +224,7 @@ impl Par2Set {
                         // Yinelenen IFSC paketi (vol kopyaları) atlanır.
                         let entry = checksums.entry(id).or_default();
                         if entry.is_empty() {
-                            for chunk in packet.body[16..].chunks_exact(20) {
+                            for chunk in packet.body[16..].as_chunks::<20>().0 {
                                 entry.push(SliceChecksum {
                                     md5: chunk[0..16].try_into().expect("16 bayt"),
                                     crc32: u32::from_le_bytes(
@@ -464,8 +464,7 @@ fn input_bases(count: u64) -> Result<Vec<u16>, Par2Error> {
 
 /// Dilimi u16 küçük-enden kelime dizisi olarak görüntüler.
 fn words(data: &[u8]) -> impl Iterator<Item = u16> + '_ {
-    data.chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+    data.as_chunks::<2>().0.iter().map(|pair| u16::from_le_bytes(*pair))
 }
 
 fn words_to_bytes(out: &[u16]) -> Vec<u8> {
