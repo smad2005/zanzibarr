@@ -98,7 +98,7 @@ class UpdateService {
   final PlayerPreferenceStorage _storage;
 
   static const releasesApiUrl =
-      'https://api.github.com/repos/envermeister/zanzibarr/releases/latest';
+      'https://api.github.com/repos/smad2005/zanzibarr/releases/latest';
   static const _skippedVersionKey = 'zanzibarr.update.skipped_version';
   static const _installChannel = MethodChannel('zanzibarr/updater');
 
