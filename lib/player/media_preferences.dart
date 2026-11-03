@@ -444,6 +444,20 @@ class MediaPreferencesStore {
       _storage.write(storageKeyFor(nzbPath), preferences.encode());
 
   Future<void> clear(String nzbPath) => _storage.delete(storageKeyFor(nzbPath));
+
+  static const seekStepKey = 'zanzibarr.player.seek_step_seconds';
+
+  Future<int?> loadSeekStepSeconds() async {
+    final value = int.tryParse(await _storage.read(seekStepKey) ?? '');
+    if (value == null) return null;
+    return value.clamp(
+      MediaPreferences.minimumSeekStepSeconds,
+      MediaPreferences.maximumSeekStepSeconds,
+    );
+  }
+
+  Future<void> saveSeekStepSeconds(int seconds) =>
+      _storage.write(seekStepKey, '$seconds');
 }
 
 double _finiteOr(double value, double fallback) =>

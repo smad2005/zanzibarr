@@ -1018,6 +1018,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _loadPreferences() async {
     final preferences = await _preferenceStore.load(widget.nzbPath);
+    final globalSeekStep = await _preferenceStore.loadSeekStepSeconds();
     _preferences = preferences;
     _canvasCommitted = CanvasCrop(
       left: preferences.crop.left,
@@ -1026,7 +1027,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       bottom: preferences.crop.bottom,
     );
     _canvasDraft = _canvasCommitted;
-    _seekStep = Duration(seconds: preferences.seekStepSeconds);
+    _seekStep = Duration(
+      seconds: globalSeekStep ?? preferences.seekStepSeconds,
+    );
     _subtitleScale = preferences.subtitleScale
         .clamp(
           AdvancedPlaybackController.minimumSubtitleScale,
@@ -1952,6 +1955,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _setSeekStep(int seconds) async {
     if (seconds < 1) return;
     setState(() => _seekStep = Duration(seconds: seconds));
+    await _preferenceStore.saveSeekStepSeconds(seconds);
     await _persistPreferences();
   }
 

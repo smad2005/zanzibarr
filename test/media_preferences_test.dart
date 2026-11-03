@@ -174,6 +174,32 @@ void main() {
     expect(MediaPreferences().subtitleFont, kDefaultSubtitleFontId);
   });
 
+  test('seek step is global and shared across media', () async {
+    final storage = _MemoryPreferenceStorage();
+    final store = MediaPreferencesStore(storage: storage);
+    expect(await store.loadSeekStepSeconds(), isNull);
+
+    await store.saveSeekStepSeconds(10);
+
+    expect(await store.loadSeekStepSeconds(), 10);
+    expect(
+      MediaPreferencesStore(storage: storage).loadSeekStepSeconds(),
+      completion(10),
+    );
+  });
+
+  test('seek step is clamped and ignores garbage', () async {
+    final storage = _MemoryPreferenceStorage();
+    final store = MediaPreferencesStore(storage: storage);
+    storage.values[MediaPreferencesStore.seekStepKey] = '99999';
+    expect(
+      await store.loadSeekStepSeconds(),
+      MediaPreferences.maximumSeekStepSeconds,
+    );
+    storage.values[MediaPreferencesStore.seekStepKey] = 'abc';
+    expect(await store.loadSeekStepSeconds(), isNull);
+  });
+
   test('clear deletes only the hashed media key', () async {
     final storage = _MemoryPreferenceStorage();
     final store = MediaPreferencesStore(storage: storage);
