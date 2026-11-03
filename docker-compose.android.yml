@@ -15,6 +15,7 @@ services:
       - pub-cache:/root/.pub-cache
       - cargo-registry:/root/.cargo/registry
       - cargo-git:/root/.cargo/git
+      - android-keystore:/root/.android
     environment:
       # TARGET_PLATFORMS=android-arm,android-arm64,android-x64
       - TARGET_PLATFORMS=${TARGET_PLATFORMS:-android-arm64}
@@ -31,7 +32,55 @@ services:
         done
       "
 
+  test: &test
+    profiles: [test]
+    image: zanzibarr-android
+    build:
+      context: .
+      dockerfile: Dockerfile.android
+    volumes:
+      - .:/app:cached
+      - app-dart-tool:/app/.dart_tool
+      - rust-target:/app/rust/target
+      - pub-cache:/root/.pub-cache
+      - cargo-registry:/root/.cargo/registry
+      - cargo-git:/root/.cargo/git
+    command: >
+      sh -c "
+        set -e;
+        cd rust;
+        cargo test;
+        cargo clippy --all-targets -- -D warnings;
+        cargo build;
+        cd ..;
+        flutter pub get;
+        flutter analyze lib test;
+        flutter test
+      "
+
+  test-rust:
+    <<: *test
+    working_dir: /app/rust
+    command: >
+      sh -c "
+        set -e;
+        cargo test;
+        cargo clippy --all-targets -- -D warnings
+      "
+
+  test-flutter:
+    <<: *test
+    command: >
+      sh -c "
+        set -e;
+        cargo build --manifest-path rust/Cargo.toml;
+        flutter pub get;
+        flutter analyze lib test;
+        flutter test
+      "
+
 volumes:
+  rust-target:
   app-build:
   app-dart-tool:
   app-android-gradle:
@@ -39,3 +88,4 @@ volumes:
   pub-cache:
   cargo-registry:
   cargo-git:
+  android-keystore:

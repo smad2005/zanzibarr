@@ -51,4 +51,8 @@ COPY --link --from=flutter /opt/flutter /opt/flutter
 
 RUN flutter config --no-analytics && flutter --version
 
+RUN apt-get update && apt-get install -y --no-install-recommends g++ && \
+    rm -rf /var/lib/apt/lists/* && \
+    rustup component add clippy
+
 WORKDIR /app
