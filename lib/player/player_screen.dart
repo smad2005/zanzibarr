@@ -1354,9 +1354,31 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     try {
-      await _player.playOrPause();
+      if (_reachedPrematureEof) {
+        await _resumeAfterPrematureEof();
+      } else {
+        await _player.playOrPause();
+      }
     } catch (error) {
       _showControlError(error);
+    }
+  }
+
+  bool get _reachedPrematureEof {
+    final state = _player.state;
+    return !state.playing &&
+        state.completed &&
+        _duration > Duration.zero &&
+        _duration - _position > const Duration(seconds: 10);
+  }
+
+  Future<void> _resumeAfterPrematureEof() async {
+    await _player.seek(_position);
+    final platform = _player.platform;
+    if (platform is NativePlayer) {
+      await platform.setProperty('pause', 'no');
+    } else {
+      await _player.play();
     }
   }
 
