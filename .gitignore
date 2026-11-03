@@ -70,3 +70,7 @@ kimi-export-*.zip
 # Hata ayıklama sırasında kopyalanan kullanıcı dosyaları (NZB, ekran
 # görüntüsü vb.) repoya girmez
 /debug/
+/.zvec-grep
+
+# Docker Android build: cache and APK output
+/output/

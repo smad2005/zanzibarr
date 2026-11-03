@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1
+FROM ubuntu:22.04 AS base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV FLUTTER_VERSION=3.44.6
+ENV FLUTTER_HOME=/opt/flutter
+ENV NDK_VERSION=28.2.13676358
+ENV ANDROID_NDK_HOME=/opt/android-sdk/ndk/28.2.13676358
+ENV PATH=$FLUTTER_HOME/bin:$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:/root/.cargo/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates unzip xz-utils curl git openjdk-17-jdk-headless gcc libc6-dev && \
+    rm -rf /var/lib/apt/lists/* && \
+    git config --global --add safe.directory '*'
+
+FROM base AS android-sdk
+
+RUN mkdir -p $ANDROID_HOME/cmdline-tools && \
+    curl -fSL --progress-bar https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdline-tools.zip && \
+    unzip -q /tmp/cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools && \
+    mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest && \
+    rm -f /tmp/cmdline-tools.zip && \
+    yes | sdkmanager --licenses > /dev/null
+
+RUN sdkmanager --install "ndk;$NDK_VERSION"
+RUN sdkmanager --install "platform-tools"
+RUN sdkmanager --install "platforms;android-36" "platforms;android-35"
+RUN sdkmanager --install "build-tools;36.0.0"
+RUN sdkmanager --install "cmake;3.22.1"
+
+FROM base AS rust
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --profile minimal --default-toolchain stable && \
+    rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+
+FROM base AS flutter
+
+RUN git clone --depth 1 https://github.com/flutter/flutter.git -b $FLUTTER_VERSION $FLUTTER_HOME && \
+    flutter precache --android --no-ios --no-web --no-linux --no-windows --no-macos
+
+FROM base
+
+COPY --link --from=android-sdk /opt/android-sdk /opt/android-sdk
+COPY --link --from=rust /root/.cargo /root/.cargo
+COPY --link --from=rust /root/.rustup /root/.rustup
+COPY --link --from=flutter /opt/flutter /opt/flutter
+
+RUN flutter config --no-analytics && flutter --version
+
+WORKDIR /app

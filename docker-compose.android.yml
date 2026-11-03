@@ -1,0 +1,41 @@
+name: zanzibarr
+
+services:
+  android:
+    build:
+      context: .
+      dockerfile: Dockerfile.android
+    volumes:
+      - .:/app:cached
+      - ./output:/output
+      - app-build:/app/build
+      - app-dart-tool:/app/.dart_tool
+      - app-android-gradle:/app/android/.gradle
+      - gradle-cache:/root/.gradle
+      - pub-cache:/root/.pub-cache
+      - cargo-registry:/root/.cargo/registry
+      - cargo-git:/root/.cargo/git
+    environment:
+      # TARGET_PLATFORMS=android-arm,android-arm64,android-x64
+      - TARGET_PLATFORMS=${TARGET_PLATFORMS:-android-arm64}
+    command: >
+      sh -c "
+        set -e;
+        flutter pub get;
+        flutter build apk --release --split-per-abi --target-platform $${TARGET_PLATFORMS};
+        mkdir -p /output;
+        for f in build/app/outputs/flutter-apk/app-*-release.apk; do
+          abi=$${f#build/app/outputs/flutter-apk/app-}; abi=$${abi%-release.apk};
+          cp \"$$f\" \"/output/zanzibarr-android-$$abi.apk\";
+          echo \"-> /output/zanzibarr-android-$$abi.apk\";
+        done
+      "
+
+volumes:
+  app-build:
+  app-dart-tool:
+  app-android-gradle:
+  gradle-cache:
+  pub-cache:
+  cargo-registry:
+  cargo-git:
