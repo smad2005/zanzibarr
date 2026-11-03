@@ -43,6 +43,18 @@ pub(crate) const ARCHIVE_PREFETCH_DEPTH: usize = 4;
 /// uyanma `Notify` ile anında gelir; bu yalnız kaçan sinyale karşı emniyettir.
 const INFLIGHT_WAIT_POLL: Duration = Duration::from_millis(100);
 
+const BODY_ATTEMPTS: u32 = 2;
+
+fn is_transport_error(error: &NntpError) -> bool {
+    matches!(
+        error,
+        NntpError::Io(_)
+            | NntpError::ConnectionClosed
+            | NntpError::Timeout { .. }
+            | NntpError::Malformed(_)
+    )
+}
+
 pub(crate) async fn read_body_with_timeout(
     duration: Duration,
     future: impl Future<Output = Result<Vec<u8>, NntpError>>,
@@ -163,25 +175,34 @@ impl FetchContext {
         };
 
         let work = async {
-            let mut conn = self
-                .pool
-                .checkout()
-                .await
-                .map_err(|e| io::Error::other(e.to_string()))?;
-            let body_result =
-                read_body_with_timeout(BODY_READ_TIMEOUT, conn.body_by_message_id(&message_id))
-                    .await;
-            let body = match body_result {
-                Ok(body) => {
-                    // Durum satırı ve multiline sonlandırıcısı eksiksiz okundu.
-                    // Bu noktadan önce future iptal edilirse varsayılan Drop
-                    // davranışı yarım soketi kapatır.
-                    conn.mark_reusable();
-                    body
+            let mut attempt = 0;
+            let body = loop {
+                attempt += 1;
+                let mut conn = self
+                    .pool
+                    .checkout()
+                    .await
+                    .map_err(|e| io::Error::other(e.to_string()))?;
+                let body_result = read_body_with_timeout(
+                    BODY_READ_TIMEOUT,
+                    conn.body_by_message_id(&message_id),
+                )
+                .await;
+                match body_result {
+                    Ok(body) => {
+                        // Durum satırı ve multiline sonlandırıcısı eksiksiz
+                        // okundu. Bu noktadan önce future iptal edilirse
+                        // varsayılan Drop davranışı yarım soketi kapatır.
+                        conn.mark_reusable();
+                        drop(conn); // bağlantı havuza döner
+                        break body;
+                    }
+                    Err(err) if attempt < BODY_ATTEMPTS && is_transport_error(&err) => {
+                        continue;
+                    }
+                    Err(err) => return Err(io::Error::other(err.to_string())),
                 }
-                Err(err) => return Err(io::Error::other(err.to_string())),
             };
-            drop(conn); // bağlantı havuza döner
 
             yenc::decode(&body).map_err(|e| io::Error::other(e.to_string()))
         };
@@ -563,6 +584,18 @@ mod tests {
         cache.insert(5, Arc::new(vec![5]));
         cache.insert(5, Arc::new(vec![9])); // yok sayılır
         assert_eq!(cache.get(5).unwrap().as_slice(), &[5]);
+    }
+
+    #[tokio::test]
+    async fn transport_errors_are_retried_missing_article_is_not() {
+        assert!(is_transport_error(&NntpError::ConnectionClosed));
+        assert!(is_transport_error(&NntpError::Io(io::Error::from(
+            io::ErrorKind::ConnectionReset
+        ))));
+        assert!(is_transport_error(&NntpError::Timeout {
+            operation: "NNTP BODY"
+        }));
+        assert!(!is_transport_error(&NntpError::NoSuchArticle));
     }
 
     #[tokio::test]

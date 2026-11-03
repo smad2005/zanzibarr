@@ -10,7 +10,7 @@
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::{Mutex as AsyncMutex, Notify, OwnedSemaphorePermit, Semaphore};
 
@@ -28,7 +28,8 @@ pub struct NntpPool<C: Connect> {
     connector: C,
     semaphore: Arc<Semaphore>,
     max_connections: usize,
-    idle: Mutex<Vec<C::Conn>>,
+    idle: Mutex<Vec<(C::Conn, Instant)>>,
+    idle_ttl: Duration,
     /// Eşzamanlı checkout'ların aynı anda TLS+AUTH bağlantısı yağdırmasını
     /// engeller. Kilidi alan görev boşta listeyi tekrar kontrol eder.
     connection_creation: AsyncMutex<()>,
@@ -40,6 +41,7 @@ const CONNECTION_LIMIT_BACKOFF_BASE_MS: u64 = 250;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const AUTH_TIMEOUT: Duration = Duration::from_secs(15);
 const MODE_READER_TIMEOUT: Duration = Duration::from_secs(10);
+const IDLE_TTL: Duration = Duration::from_secs(30);
 
 fn connection_limit_backoff(step: usize) -> Option<Duration> {
     (step < CONNECTION_LIMIT_BACKOFF_STEPS)
@@ -64,6 +66,7 @@ impl<C: Connect> NntpPool<C> {
             semaphore: Arc::new(Semaphore::new(max_connections)),
             max_connections,
             idle: Mutex::new(Vec::new()),
+            idle_ttl: IDLE_TTL,
             connection_creation: AsyncMutex::new(()),
             idle_available: Notify::new(),
         })
@@ -129,7 +132,16 @@ impl<C: Connect> NntpPool<C> {
     }
 
     fn take_idle(&self) -> Option<C::Conn> {
-        self.idle.lock().expect("kilit zehirlenmez").pop()
+        let ttl = self.idle_ttl;
+        let (fresh, stale) = {
+            let mut idle = self.idle.lock().expect("kilit zehirlenmez");
+            let (kept, stale): (Vec<_>, Vec<_>) =
+                idle.drain(..).partition(|(_, since)| since.elapsed() <= ttl);
+            *idle = kept;
+            (idle.pop().map(|(conn, _)| conn), stale)
+        };
+        drop(stale);
+        fresh
     }
 
     fn pooled(
@@ -184,7 +196,11 @@ impl<C: Connect> Drop for PooledConnection<C> {
     fn drop(&mut self) {
         if self.reusable {
             if let Some(conn) = self.conn.take() {
-                self.pool.idle.lock().expect("kilit zehirlenmez").push(conn);
+                self.pool
+                    .idle
+                    .lock()
+                    .expect("kilit zehirlenmez")
+                    .push((conn, Instant::now()));
                 self.pool.idle_available.notify_one();
             }
         }
@@ -315,6 +331,26 @@ mod tests {
                 active: Arc::clone(&self.active),
             })
         }
+    }
+
+    #[tokio::test]
+    async fn stale_idle_connection_is_closed_not_reused() {
+        let mut pool = NntpPool::new(CountingConnector::new(), 4);
+        Arc::get_mut(&mut pool).unwrap().idle_ttl = Duration::from_millis(20);
+        let mut conn = pool.checkout().await.unwrap();
+        conn.mark_reusable();
+        drop(conn);
+        assert_eq!(pool.idle_count(), 1);
+
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        let conn = pool.checkout().await.unwrap();
+        assert_eq!(pool.connector.created.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            pool.connector.active.load(Ordering::SeqCst),
+            1,
+            "stale idle connection must be closed, not reused"
+        );
+        drop(conn);
     }
 
     #[tokio::test]
