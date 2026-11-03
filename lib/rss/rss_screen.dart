@@ -832,10 +832,24 @@ class _ItemCard extends StatelessWidget {
                     tooltip: l10n.rssDownloadNzb,
                     visualDensity: VisualDensity.compact,
                     onPressed: saveEnabled ? onSave : null,
-                    icon: Icon(
-                      Icons.download_rounded,
-                      size: 20,
-                      color: foreground.withValues(alpha: 0.6),
+                    icon: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.download_rounded,
+                          size: 18,
+                          color: foreground.withValues(alpha: 0.6),
+                        ),
+                        Text(
+                          'NZB',
+                          style: TextStyle(
+                            color: foreground.withValues(alpha: 0.6),
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                            height: 1,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
             const SizedBox(width: 2),
