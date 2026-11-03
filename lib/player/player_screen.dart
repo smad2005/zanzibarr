@@ -3216,6 +3216,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                 videoFill: _videoFill,
                 onToggleVideoFit: _toggleVideoFit,
                 onDoubleTapSeek: _flashSeek,
+                seekStepSeconds: _seekStep.inSeconds,
+                onSkipBackward: () =>
+                    unawaited(_seekRelative(_negateDuration(_seekStep))),
+                onSkipForward: () => unawaited(_seekRelative(_seekStep)),
                 onVolumeChanged: _onVolumeChanged,
                 onToggleMute: _toggleMute,
                 onFrameBackward: () => unawaited(_stepBackward()),

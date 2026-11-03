@@ -32,6 +32,9 @@ class GyuniPlayerChrome extends StatelessWidget {
     required this.onToggleSubtitleControls,
     required this.onToggleVideoFit,
     required this.onDoubleTapSeek,
+    required this.seekStepSeconds,
+    required this.onSkipBackward,
+    required this.onSkipForward,
     required this.onFrameBackward,
     required this.onFrameForward,
     required this.onScrubStart,
@@ -105,6 +108,9 @@ class GyuniPlayerChrome extends StatelessWidget {
   final VoidCallback onToggleSubtitleControls;
   final VoidCallback onToggleVideoFit;
   final ValueChanged<int> onDoubleTapSeek;
+  final int seekStepSeconds;
+  final VoidCallback onSkipBackward;
+  final VoidCallback onSkipForward;
   final VoidCallback onFrameBackward;
   final VoidCallback onFrameForward;
   final ValueChanged<Duration> onScrubStart;
@@ -241,6 +247,9 @@ class GyuniPlayerChrome extends StatelessWidget {
                           onTogglePlay: onTogglePlay,
                           onToggleMute: onToggleMute,
                           onVolumeChanged: onVolumeChanged,
+                          seekStepSeconds: seekStepSeconds,
+                          onSkipBackward: onSkipBackward,
+                          onSkipForward: onSkipForward,
                           onFrameBackward: onFrameBackward,
                           onFrameForward: onFrameForward,
                           onScrubStart: onScrubStart,
@@ -589,6 +598,9 @@ class _BottomControls extends StatelessWidget {
     required this.onTogglePlay,
     required this.onToggleMute,
     required this.onVolumeChanged,
+    required this.seekStepSeconds,
+    required this.onSkipBackward,
+    required this.onSkipForward,
     required this.onFrameBackward,
     required this.onFrameForward,
     required this.onScrubStart,
@@ -616,6 +628,9 @@ class _BottomControls extends StatelessWidget {
   final VoidCallback onTogglePlay;
   final VoidCallback onToggleMute;
   final ValueChanged<double> onVolumeChanged;
+  final int seekStepSeconds;
+  final VoidCallback onSkipBackward;
+  final VoidCallback onSkipForward;
   final VoidCallback onFrameBackward;
   final VoidCallback onFrameForward;
   final ValueChanged<Duration> onScrubStart;
@@ -722,6 +737,24 @@ class _BottomControls extends StatelessWidget {
                           tooltip: playing ? l10n.pause : l10n.play,
                           focusNode: playButtonFocusNode,
                           onPressed: ready ? onTogglePlay : null,
+                        ),
+                        _CompactIconButton(
+                          icon: Icons.replay_rounded,
+                          iconWidget: _SkipIcon(
+                            seconds: seekStepSeconds,
+                            forward: false,
+                          ),
+                          tooltip: l10n.seekBackSeconds(seekStepSeconds),
+                          onPressed: ready ? onSkipBackward : null,
+                        ),
+                        _CompactIconButton(
+                          icon: Icons.replay_rounded,
+                          iconWidget: _SkipIcon(
+                            seconds: seekStepSeconds,
+                            forward: true,
+                          ),
+                          tooltip: l10n.seekForwardSeconds(seekStepSeconds),
+                          onPressed: ready ? onSkipForward : null,
                         ),
                         if (showFrameControls) ...[
                           _CompactIconButton(
@@ -1074,9 +1107,13 @@ class _CompactIconButton extends StatelessWidget {
     required this.onPressed,
     this.selected = false,
     this.focusNode,
+    this.iconWidget,
   });
 
   final IconData icon;
+
+  /// [icon] yerine çizilecek özel ikon (ör. içinde sayı olan atlama ikonu).
+  final Widget? iconWidget;
   final String tooltip;
   final VoidCallback? onPressed;
   final bool selected;
@@ -1106,8 +1143,54 @@ class _CompactIconButton extends StatelessWidget {
             ),
           ),
           onPressed: onPressed,
-          icon: Icon(icon, size: 18),
+          icon: iconWidget ?? Icon(icon, size: 18),
         ),
+      ),
+    );
+  }
+}
+
+/// Dairesel ok içinde atlama süresi ("−10" / "+10"); süre ayarlardaki
+/// atlama adımından gelir, bu yüzden Material'in sabit replay_10 ikonları
+/// yerine çizilir. İleri yönde ok yatay aynalanır.
+class _SkipIcon extends StatelessWidget {
+  const _SkipIcon({required this.seconds, required this.forward});
+
+  final int seconds;
+  final bool forward;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 24.0;
+    final color = IconTheme.of(context).color;
+    return SizedBox.square(
+      dimension: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Transform.flip(
+            flipX: forward,
+            child: const Icon(Icons.replay_rounded, size: size),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: SizedBox(
+              width: 11,
+              height: 9,
+              child: FittedBox(
+                child: Text(
+                  '${forward ? '+' : '−'}$seconds',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
