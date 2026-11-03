@@ -38,6 +38,9 @@ class _RssScreenState extends State<RssScreen> {
 
   List<RssFeed> _feeds = [];
   List<RssTag> _tags = [];
+  List<RssTag> _sortedTags = const [];
+  Map<String, DateTime> _tagNewest = const {};
+  bool _drawerOpen = false;
   bool _loadingConfig = true;
 
   String? _selectedFeedId;
@@ -70,11 +73,13 @@ class _RssScreenState extends State<RssScreen> {
   void initState() {
     super.initState();
     _filterController.addListener(() => setState(() {}));
+    _cache.addListener(_recomputeTagFreshness);
     _loadConfig();
   }
 
   @override
   void dispose() {
+    _cache.removeListener(_recomputeTagFreshness);
     _filterController.dispose();
     super.dispose();
   }
@@ -101,7 +106,36 @@ class _RssScreenState extends State<RssScreen> {
       _loadingConfig = false;
       _selectedFeedId = feeds.isEmpty ? null : feeds.first.id;
     });
+    _recomputeTagFreshness();
     await _loadItems();
+    await _prefetchAllFeeds();
+  }
+
+  Future<void> _prefetchAllFeeds() async {
+    await Future.wait(
+      _feeds.map((feed) async {
+        try {
+          await _cache.fetch(feed);
+        } catch (_) {}
+      }),
+    );
+  }
+
+  void _recomputeTagFreshness() {
+    if (!mounted) return;
+    final itemsByFeed = {
+      for (final feed in _feeds) feed.id: ?_cache.peek(feed),
+    };
+    final newest = {
+      for (final tag in _tags)
+        tag.id: ?newestTagMatch(tag, _feeds, itemsByFeed),
+    };
+    setState(() {
+      _tagNewest = newest;
+      _sortedTags = _drawerOpen
+          ? keepTagOrder(_tags, _sortedTags)
+          : sortTagsByFreshness(_tags, newest, DateTime.now().toUtc());
+    });
   }
 
   RssFeed? get _selectedFeed =>
@@ -194,6 +228,7 @@ class _RssScreenState extends State<RssScreen> {
     await _store.saveFeeds(feeds);
     if (existing != null) _cache.invalidate([existing]);
     setState(() => _feeds = feeds);
+    _recomputeTagFreshness();
     _selectFeed(result);
   }
 
@@ -220,6 +255,7 @@ class _RssScreenState extends State<RssScreen> {
         _selectedFeedId = feeds.isEmpty ? null : feeds.first.id;
       }
     });
+    _recomputeTagFreshness();
     _loadItems();
   }
 
@@ -236,6 +272,7 @@ class _RssScreenState extends State<RssScreen> {
     ];
     await _store.saveTags(tags);
     setState(() => _tags = tags);
+    _recomputeTagFreshness();
     _selectTag(result);
   }
 
@@ -249,6 +286,7 @@ class _RssScreenState extends State<RssScreen> {
         _selectedFeedId = _feeds.isEmpty ? null : _feeds.first.id;
       }
     });
+    _recomputeTagFreshness();
     _loadItems();
   }
 
@@ -360,12 +398,17 @@ class _RssScreenState extends State<RssScreen> {
     final l10n = AppLocalizations.of(context);
     final title = _selectedFeed?.name ?? _selectedTag?.name;
     return Scaffold(
+      onDrawerChanged: (opened) {
+        _drawerOpen = opened;
+        if (!opened) _recomputeTagFreshness();
+      },
       drawer: Drawer(
         child: SafeArea(
           child: Builder(
             builder: (drawerContext) => _Sidebar(
               feeds: _feeds,
-              tags: _tags,
+              tags: _sortedTags,
+              tagNewest: _tagNewest,
               selectedFeedId: _selectedFeedId,
               selectedTagId: _selectedTagId,
               onSelectFeed: (feed) {
@@ -522,6 +565,7 @@ class _Sidebar extends StatelessWidget {
   const _Sidebar({
     required this.feeds,
     required this.tags,
+    required this.tagNewest,
     required this.selectedFeedId,
     required this.selectedTagId,
     required this.onSelectFeed,
@@ -536,6 +580,7 @@ class _Sidebar extends StatelessWidget {
 
   final List<RssFeed> feeds;
   final List<RssTag> tags;
+  final Map<String, DateTime> tagNewest;
   final String? selectedFeedId;
   final String? selectedTagId;
   final ValueChanged<RssFeed> onSelectFeed;
@@ -550,6 +595,7 @@ class _Sidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final now = DateTime.now().toUtc();
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
@@ -578,6 +624,10 @@ class _Sidebar extends StatelessWidget {
             icon: Icons.sell_outlined,
             title: tag.name,
             subtitle: tag.isRegex ? '/${tag.pattern}/' : tag.pattern,
+            age: switch (tagNewest[tag.id]) {
+              final newest? => formatRssAge(newest, now),
+              null => null,
+            },
             selected: tag.id == selectedTagId,
             onTap: () => onSelectTag(tag),
             onEdit: () => onEditTag(tag),
@@ -638,11 +688,13 @@ class _SourceTile extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     this.subtitle,
+    this.age,
   });
 
   final IconData icon;
   final String title;
   final String? subtitle;
+  final String? age;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onEdit;
@@ -660,12 +712,27 @@ class _SourceTile extends StatelessWidget {
           ? null
           : Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis),
       onTap: onTap,
-      trailing: PopupMenuButton<bool>(
-        icon: const Icon(Icons.more_vert_rounded, size: 18),
-        onSelected: (edit) => edit ? onEdit() : onDelete(),
-        itemBuilder: (_) => [
-          PopupMenuItem(value: true, child: Text(l10n.rssEdit)),
-          PopupMenuItem(value: false, child: Text(l10n.rssDelete)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (age case final age?)
+            Text(
+              age,
+              style: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.5),
+                fontSize: 11,
+              ),
+            ),
+          PopupMenuButton<bool>(
+            icon: const Icon(Icons.more_vert_rounded, size: 18),
+            onSelected: (edit) => edit ? onEdit() : onDelete(),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: true, child: Text(l10n.rssEdit)),
+              PopupMenuItem(value: false, child: Text(l10n.rssDelete)),
+            ],
+          ),
         ],
       ),
     );
@@ -701,13 +768,6 @@ class _ItemCard extends StatelessWidget {
     return '<1 MB';
   }
 
-  static String _formatAge(DateTime published) {
-    final age = DateTime.now().toUtc().difference(published);
-    if (age.inMinutes < 60) return '${age.inMinutes.clamp(0, 59)}m';
-    if (age.inHours < 48) return '${age.inHours}h';
-    return '${age.inDays}d';
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -715,7 +775,8 @@ class _ItemCard extends StatelessWidget {
     final meta = [
       ?feedName,
       if (item.sizeBytes case final size?) _formatSize(size),
-      if (item.published case final published?) _formatAge(published),
+      if (item.published case final published?)
+        formatRssAge(published, DateTime.now().toUtc()),
       ?item.category,
     ].join(' · ');
     return Material(

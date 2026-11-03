@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
@@ -89,6 +90,56 @@ class RssTag {
       feedIds: feedIds is List ? feedIds.whereType<String>().toList() : const [],
     );
   }
+}
+
+DateTime? newestTagMatch(
+  RssTag tag,
+  List<RssFeed> feeds,
+  Map<String, List<RssItem>> itemsByFeed,
+) {
+  DateTime? newest;
+  for (final feed in tag.feedsFrom(feeds)) {
+    for (final item in itemsByFeed[feed.id] ?? const <RssItem>[]) {
+      final published = item.published;
+      if (published == null || !tag.matches(item.title)) continue;
+      if (newest == null || published.isAfter(newest)) newest = published;
+    }
+  }
+  return newest;
+}
+
+List<RssTag> sortTagsByFreshness(
+  List<RssTag> tags,
+  Map<String, DateTime> newestByTag,
+  DateTime now,
+) {
+  int? ageHours(RssTag tag) {
+    final newest = newestByTag[tag.id];
+    return newest == null ? null : now.difference(newest).inHours;
+  }
+
+  return [...tags]..sort((a, b) {
+    final ageA = ageHours(a), ageB = ageHours(b);
+    if (ageA != ageB) {
+      if (ageA == null) return 1;
+      if (ageB == null) return -1;
+      return ageA.compareTo(ageB);
+    }
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  });
+}
+
+List<RssTag> keepTagOrder(List<RssTag> tags, List<RssTag> previous) {
+  final byId = {for (final tag in tags) tag.id: tag};
+  final kept = [for (final tag in previous) ?byId.remove(tag.id)];
+  return [...kept, ...byId.values];
+}
+
+String formatRssAge(DateTime published, DateTime now) {
+  final age = now.difference(published);
+  if (age.inMinutes < 60) return '${age.inMinutes.clamp(0, 59)}m';
+  if (age.inHours < 48) return '${age.inHours}h';
+  return '${age.inDays}d';
 }
 
 class RssItem {
@@ -183,7 +234,7 @@ DateTime? parseRfc822Date(String value) {
   return utc.subtract(offset * sign);
 }
 
-class RssFeedCache {
+class RssFeedCache extends ChangeNotifier {
   RssFeedCache({http.Client? client, DateTime Function()? clock})
     : _client = client ?? http.Client(),
       _clock = clock ?? DateTime.now;
@@ -210,7 +261,13 @@ class RssFeedCache {
     }
     final items = parseRssItems(response.body, feedId: feed.id);
     _entries[feed.url] = (fetchedAt: _clock(), items: items);
+    notifyListeners();
     return items;
+  }
+
+  List<RssItem>? peek(RssFeed feed) {
+    final cached = _entries[feed.url];
+    return cached == null ? null : _withFeedId(cached.items, feed.id);
   }
 
   void invalidate([Iterable<RssFeed>? feeds]) {

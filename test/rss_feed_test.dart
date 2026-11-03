@@ -125,6 +125,26 @@ void main() {
       );
       expect(cache.fetch(feed), throwsA(isA<RssFetchException>()));
     });
+
+    test('notifies only on fresh network data, peek makes no request', () async {
+      var requests = 0;
+      var notifications = 0;
+      final cache = RssFeedCache(
+        client: MockClient((_) async {
+          requests++;
+          return http.Response(_enclosureOnlyFeed, 200);
+        }),
+      )..addListener(() => notifications++);
+
+      expect(cache.peek(feed), isNull);
+      await cache.fetch(feed);
+      await cache.fetch(feed);
+      expect(notifications, 1);
+
+      const renamed = RssFeed(id: 'g', name: 'G', url: 'https://feed.example/rss');
+      expect(cache.peek(renamed)!.single.feedId, 'g');
+      expect(requests, 1);
+    });
   });
 
   group('safeNzbFileName', () {
@@ -161,6 +181,84 @@ void main() {
       final name = safeNzbFileName('x' * 300, suffix: ' (12)');
       expect(name, endsWith(' (12).nzb'));
       expect(utf8.encode(name).length, lessThanOrEqualTo(200));
+    });
+  });
+
+  group('tag freshness', () {
+    RssItem item(String title, String feedId, DateTime? published) => RssItem(
+      title: title,
+      nzbUrl: 'https://example.org/$title.nzb',
+      feedId: feedId,
+      published: published,
+    );
+
+    const feeds = [
+      RssFeed(id: 'a', name: 'A', url: 'https://a'),
+      RssFeed(id: 'b', name: 'B', url: 'https://b'),
+    ];
+
+    test('newestTagMatch picks the newest matching item from the tag feeds', () {
+      final itemsByFeed = {
+        'a': [
+          item('Show 01', 'a', DateTime.utc(2026, 11, 1, 10)),
+          item('Show 02', 'a', DateTime.utc(2026, 11, 3, 10)),
+          item('Other', 'a', DateTime.utc(2026, 11, 4, 10)),
+        ],
+        'b': [item('Show 03', 'b', DateTime.utc(2026, 11, 4, 9))],
+      };
+      const all = RssTag(id: 't1', name: 'show', pattern: 'show');
+      const onlyA = RssTag(id: 't2', name: 'show', pattern: 'show', feedIds: ['a']);
+      const none = RssTag(id: 't3', name: 'none', pattern: 'zzz');
+
+      expect(newestTagMatch(all, feeds, itemsByFeed), DateTime.utc(2026, 11, 4, 9));
+      expect(newestTagMatch(onlyA, feeds, itemsByFeed), DateTime.utc(2026, 11, 3, 10));
+      expect(newestTagMatch(none, feeds, itemsByFeed), isNull);
+    });
+
+    test('sortTagsByFreshness puts fresh tags first, ties and undated by name', () {
+      final now = DateTime.utc(2026, 11, 4, 12);
+      const tags = [
+        RssTag(id: '1', name: 'zeta', pattern: 'z'),
+        RssTag(id: '2', name: 'Alpha', pattern: 'a'),
+        RssTag(id: '3', name: 'old', pattern: 'o'),
+        RssTag(id: '4', name: 'beta', pattern: 'b'),
+        RssTag(id: '5', name: 'empty-b', pattern: 'e'),
+        RssTag(id: '6', name: 'empty-a', pattern: 'e'),
+      ];
+      final newest = {
+        '1': now.subtract(const Duration(minutes: 10)),
+        '2': now.subtract(const Duration(minutes: 50)),
+        '3': now.subtract(const Duration(days: 3)),
+        '4': now.subtract(const Duration(hours: 2)),
+      };
+
+      final sorted = sortTagsByFreshness(tags, newest, now);
+
+      expect(
+        sorted.map((t) => t.name),
+        ['Alpha', 'zeta', 'beta', 'old', 'empty-a', 'empty-b'],
+      );
+      expect(tags.first.name, 'zeta');
+    });
+
+    test('keepTagOrder keeps previous order, appends new, drops removed', () {
+      const a = RssTag(id: 'a', name: 'a', pattern: 'a');
+      const b = RssTag(id: 'b', name: 'b', pattern: 'b');
+      const c = RssTag(id: 'c', name: 'c', pattern: 'c');
+      const bRenamed = RssTag(id: 'b', name: 'b2', pattern: 'b');
+      const d = RssTag(id: 'd', name: 'd', pattern: 'd');
+
+      final kept = keepTagOrder([a, bRenamed, d], [c, b, a]);
+
+      expect(kept.map((t) => t.name), ['b2', 'a', 'd']);
+    });
+
+    test('formatRssAge uses minutes, hours up to 48, then days', () {
+      final now = DateTime.utc(2026, 11, 4, 12);
+      expect(formatRssAge(now.subtract(const Duration(minutes: 5)), now), '5m');
+      expect(formatRssAge(now.subtract(const Duration(hours: 47)), now), '47h');
+      expect(formatRssAge(now.subtract(const Duration(days: 3)), now), '3d');
+      expect(formatRssAge(now.add(const Duration(minutes: 5)), now), '0m');
     });
   });
 }
