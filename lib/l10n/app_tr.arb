@@ -258,5 +258,6 @@
   "rssFilterClose": "Süzgeci kapat",
   "rssFilterHint": "Başlığa göre süz…",
   "rssDownloadNzb": "NZB indir",
-  "rssSaved": "Kaydedildi: {path}"
+  "rssSaved": "Kaydedildi: {path}",
+  "rssTitleCopied": "Başlık kopyalandı"
 }

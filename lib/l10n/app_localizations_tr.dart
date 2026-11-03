@@ -835,4 +835,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String rssSaved(String path) {
     return 'Kaydedildi: $path';
   }
+
+  @override
+  String get rssTitleCopied => 'Başlık kopyalandı';
 }

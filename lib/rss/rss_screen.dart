@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../l10n/app_localizations.dart';
@@ -543,15 +545,18 @@ class _RssScreenState extends State<RssScreen> {
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final item = items[index];
-                    return _ItemCard(
-                      item: item,
-                      feedName: showFeedName ? feedNames[item.feedId] : null,
-                      busy: _busyNzbUrl == item.nzbUrl,
-                      enabled: _busyNzbUrl == null,
-                      onPlay: () => _play(item),
-                      saving: _savingNzbUrl == item.nzbUrl,
-                      saveEnabled: _savingNzbUrl == null,
-                      onSave: () => _saveNzb(item),
+                    return _HoldToCopy(
+                      text: item.title,
+                      child: _ItemCard(
+                        item: item,
+                        feedName: showFeedName ? feedNames[item.feedId] : null,
+                        busy: _busyNzbUrl == item.nzbUrl,
+                        enabled: _busyNzbUrl == null,
+                        onPlay: () => _play(item),
+                        saving: _savingNzbUrl == item.nzbUrl,
+                        saveEnabled: _savingNzbUrl == null,
+                        onSave: () => _saveNzb(item),
+                      ),
                     );
                   },
                 ),
@@ -735,6 +740,39 @@ class _SourceTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _HoldToCopy extends StatelessWidget {
+  const _HoldToCopy({required this.text, required this.child});
+
+  static const holdDuration = Duration(seconds: 3);
+
+  final String text;
+  final Widget child;
+
+  Future<void> _copy(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final message = AppLocalizations.of(context).rssTitleCopied;
+    await Clipboard.setData(ClipboardData(text: text));
+    await HapticFeedback.mediumImpact();
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      gestures: {
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+              () => LongPressGestureRecognizer(duration: holdDuration),
+              (recognizer) => recognizer.onLongPress = () => _copy(context),
+            ),
+      },
+      child: child,
     );
   }
 }

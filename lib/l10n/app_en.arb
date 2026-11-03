@@ -387,5 +387,6 @@
   "rssFilterHint": "Filter by title…",
   "rssDownloadNzb": "Download NZB",
   "rssSaved": "Saved: {path}",
-  "@rssSaved": { "placeholders": { "path": { "type": "String" } } }
+  "@rssSaved": { "placeholders": { "path": { "type": "String" } } },
+  "rssTitleCopied": "Title copied"
 }

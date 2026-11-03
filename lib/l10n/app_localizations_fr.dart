@@ -843,4 +843,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String rssSaved(String path) {
     return 'Saved: $path';
   }
+
+  @override
+  String get rssTitleCopied => 'Title copied';
 }

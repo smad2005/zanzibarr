@@ -839,4 +839,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String rssSaved(String path) {
     return 'Сохранено: $path';
   }
+
+  @override
+  String get rssTitleCopied => 'Название скопировано';
 }

@@ -1585,6 +1585,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved: {path}'**
   String rssSaved(String path);
+
+  /// No description provided for @rssTitleCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Title copied'**
+  String get rssTitleCopied;
 }
 
 class _AppLocalizationsDelegate
