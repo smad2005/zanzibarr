@@ -641,6 +641,7 @@ class _TuningDialogOpenerState extends State<_TuningDialogOpener> {
 
 void main() {
   setUpAll(() async {
+    if (_skipScreenshots) return;
     TestWidgetsFlutterBinding.ensureInitialized();
     // Golden testlerde varsayılan test fontu kutu (tofu) çizer; sistemdeki
     // gerçek Arial TTF'lerini tek aile altında yükle.
