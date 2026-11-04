@@ -261,4 +261,78 @@ void main() {
       expect(formatRssAge(now.add(const Duration(minutes: 5)), now), '0m');
     });
   });
+
+  group('favorites', () {
+    RssItem item(String title, {String feedId = 'a', String url = 'u'}) =>
+        RssItem(title: title, nzbUrl: url, feedId: feedId);
+
+    test('item survives a JSON round trip', () {
+      final original = RssItem(
+        title: 'Show.S01E01.1080p',
+        nzbUrl: 'https://example.test/getnzb/1.nzb',
+        feedId: 'feed-1',
+        sizeBytes: 1503238553,
+        published: DateTime.utc(2026, 11, 3, 4, 38, 49),
+        category: 'TV > HD',
+      );
+      final restored = RssItem.fromJson(
+        jsonDecode(jsonEncode(original.toJson())),
+      )!;
+      expect(restored.title, original.title);
+      expect(restored.nzbUrl, original.nzbUrl);
+      expect(restored.feedId, original.feedId);
+      expect(restored.sizeBytes, original.sizeBytes);
+      expect(restored.published, original.published);
+      expect(restored.category, original.category);
+    });
+
+    test('item without optional fields round trips and bad input is rejected',
+        () {
+      final restored = RssItem.fromJson(item('Bare').toJson())!;
+      expect(restored.sizeBytes, isNull);
+      expect(restored.published, isNull);
+      expect(restored.category, isNull);
+      expect(RssItem.fromJson({'title': 'x'}), isNull);
+      expect(RssItem.fromJson('nope'), isNull);
+    });
+
+    test('toggle adds new favorites first', () {
+      final first = toggleRssFavorite(const [], item('One', url: '1'));
+      final second = toggleRssFavorite(first, item('Two', url: '2'));
+      expect(second.map((e) => e.title), ['Two', 'One']);
+    });
+
+    test('toggle removes an existing favorite', () {
+      final favorites = [item('One', url: '1'), item('Two', url: '2')];
+      expect(
+        toggleRssFavorite(favorites, item('One', url: '1')).map((e) => e.title),
+        ['Two'],
+      );
+    });
+
+    test('same NZB link from the same feed is a duplicate', () {
+      final favorites = [item('Old title', feedId: 'a', url: 'x')];
+      expect(
+        toggleRssFavorite(favorites, item('New title', feedId: 'a', url: 'x')),
+        isEmpty,
+      );
+    });
+
+    test('same NZB link from another feed is a separate favorite', () {
+      final favorites = [item('Show', feedId: 'a', url: 'x')];
+      final toggled = toggleRssFavorite(
+        favorites,
+        item('Show', feedId: 'b', url: 'x'),
+      );
+      expect(toggled.map((e) => e.feedId), ['b', 'a']);
+    });
+
+    test('same title with another NZB link is a separate favorite', () {
+      final favorites = [item('Show', feedId: 'a', url: 'x')];
+      expect(
+        toggleRssFavorite(favorites, item('Show', feedId: 'a', url: 'y')),
+        hasLength(2),
+      );
+    });
+  });
 }

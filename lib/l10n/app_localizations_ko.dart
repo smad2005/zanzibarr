@@ -828,4 +828,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get rssTitleCopied => 'Title copied';
+
+  @override
+  String get rssFavorites => 'Favorites';
+
+  @override
+  String get rssAddFavorite => 'Add to favorites';
+
+  @override
+  String get rssRemoveFavorite => 'Remove from favorites';
 }

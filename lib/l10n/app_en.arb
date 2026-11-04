@@ -388,5 +388,8 @@
   "rssDownloadNzb": "Download NZB",
   "rssSaved": "Saved: {path}",
   "@rssSaved": { "placeholders": { "path": { "type": "String" } } },
-  "rssTitleCopied": "Title copied"
+  "rssTitleCopied": "Title copied",
+  "rssFavorites": "Favorites",
+  "rssAddFavorite": "Add to favorites",
+  "rssRemoveFavorite": "Remove from favorites"
 }

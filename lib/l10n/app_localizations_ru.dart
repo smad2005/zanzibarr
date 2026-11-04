@@ -842,4 +842,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get rssTitleCopied => 'Название скопировано';
+
+  @override
+  String get rssFavorites => 'Избранное';
+
+  @override
+  String get rssAddFavorite => 'Добавить в избранное';
+
+  @override
+  String get rssRemoveFavorite => 'Убрать из избранного';
 }

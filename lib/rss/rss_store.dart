@@ -12,6 +12,15 @@ class RssStore {
 
   static const _kFeeds = 'rss.feeds';
   static const _kTags = 'rss.tags';
+  static const _kFavorites = 'rss.favorites';
+
+  Future<List<RssItem>> loadFavorites() async =>
+      _decodeList(await _storage.read(key: _kFavorites), RssItem.fromJson);
+
+  Future<void> saveFavorites(List<RssItem> favorites) => _storage.write(
+    key: _kFavorites,
+    value: jsonEncode([for (final item in favorites) item.toJson()]),
+  );
 
   Future<List<RssFeed>> loadFeeds() async =>
       _decodeList(await _storage.read(key: _kFeeds), RssFeed.fromJson);

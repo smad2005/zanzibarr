@@ -259,5 +259,8 @@
   "rssFilterHint": "Başlığa göre süz…",
   "rssDownloadNzb": "NZB indir",
   "rssSaved": "Kaydedildi: {path}",
-  "rssTitleCopied": "Başlık kopyalandı"
+  "rssTitleCopied": "Başlık kopyalandı",
+  "rssFavorites": "Favoriler",
+  "rssAddFavorite": "Favorilere ekle",
+  "rssRemoveFavorite": "Favorilerden çıkar"
 }

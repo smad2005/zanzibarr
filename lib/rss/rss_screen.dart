@@ -47,6 +47,10 @@ class _RssScreenState extends State<RssScreen> {
 
   String? _selectedFeedId;
   String? _selectedTagId;
+  bool _favoritesSelected = false;
+
+  List<RssItem> _favorites = const [];
+  Set<String> _favoriteKeys = const {};
 
   List<RssItem>? _items;
   bool _loadingItems = false;
@@ -96,15 +100,18 @@ class _RssScreenState extends State<RssScreen> {
   Future<void> _loadConfig() async {
     List<RssFeed> feeds = [];
     List<RssTag> tags = [];
+    List<RssItem> favorites = [];
     try {
       feeds = await _store.loadFeeds();
       tags = await _store.loadTags();
+      favorites = await _store.loadFavorites();
     } catch (_) {
     }
     if (!mounted) return;
     setState(() {
       _feeds = feeds;
       _tags = tags;
+      _setFavorites(favorites);
       _loadingConfig = false;
       _selectedFeedId = feeds.isEmpty ? null : feeds.first.id;
     });
@@ -203,6 +210,7 @@ class _RssScreenState extends State<RssScreen> {
     setState(() {
       _selectedFeedId = feed.id;
       _selectedTagId = null;
+      _favoritesSelected = false;
     });
     _loadItems();
   }
@@ -211,8 +219,36 @@ class _RssScreenState extends State<RssScreen> {
     setState(() {
       _selectedTagId = tag.id;
       _selectedFeedId = null;
+      _favoritesSelected = false;
     });
     _loadItems();
+  }
+
+  void _selectFavorites() {
+    setState(() {
+      _favoritesSelected = true;
+      _selectedFeedId = null;
+      _selectedTagId = null;
+    });
+    _loadItems();
+  }
+
+  void _setFavorites(List<RssItem> favorites) {
+    _favorites = favorites;
+    _favoriteKeys = {for (final item in favorites) rssFavoriteKey(item)};
+  }
+
+  Future<void> _toggleFavorite(RssItem item) async {
+    final favorites = toggleRssFavorite(_favorites, item);
+    setState(() => _setFavorites(favorites));
+    try {
+      await _store.saveFavorites(favorites);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+    }
   }
 
   static String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
@@ -398,7 +434,10 @@ class _RssScreenState extends State<RssScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final title = _selectedFeed?.name ?? _selectedTag?.name;
+    final title =
+        _selectedFeed?.name ??
+        _selectedTag?.name ??
+        (_favoritesSelected ? l10n.rssFavorites : null);
     return Scaffold(
       onDrawerChanged: (opened) {
         _drawerOpen = opened;
@@ -413,6 +452,12 @@ class _RssScreenState extends State<RssScreen> {
               tagNewest: _tagNewest,
               selectedFeedId: _selectedFeedId,
               selectedTagId: _selectedTagId,
+              favoritesCount: _favorites.length,
+              favoritesSelected: _favoritesSelected,
+              onSelectFavorites: () {
+                Navigator.of(drawerContext).pop();
+                _selectFavorites();
+              },
               onSelectFeed: (feed) {
                 Navigator.of(drawerContext).pop();
                 _selectFeed(feed);
@@ -500,7 +545,7 @@ class _RssScreenState extends State<RssScreen> {
         ),
       );
     }
-    if (_feeds.isEmpty) {
+    if (_feeds.isEmpty && !_favoritesSelected) {
       return _Hint(
         icon: Icons.rss_feed_rounded,
         message: l10n.rssNoFeeds,
@@ -511,7 +556,7 @@ class _RssScreenState extends State<RssScreen> {
         ),
       );
     }
-    final loaded = _items;
+    final loaded = _favoritesSelected ? _favorites : _items;
     if (loaded == null) {
       return _Hint(icon: Icons.rss_feed_rounded, message: l10n.rssSelectSource);
     }
@@ -522,7 +567,7 @@ class _RssScreenState extends State<RssScreen> {
               .where((item) => item.title.toLowerCase().contains(query))
               .toList();
     final feedNames = {for (final feed in _feeds) feed.id: feed.name};
-    final showFeedName = _selectedTag != null;
+    final showFeedName = _selectedTag != null || _favoritesSelected;
     return Column(
       children: [
         for (final error in _errors)
@@ -550,6 +595,8 @@ class _RssScreenState extends State<RssScreen> {
                       child: _ItemCard(
                         item: item,
                         feedName: showFeedName ? feedNames[item.feedId] : null,
+                        favorite: _favoriteKeys.contains(rssFavoriteKey(item)),
+                        onToggleFavorite: () => _toggleFavorite(item),
                         busy: _busyNzbUrl == item.nzbUrl,
                         enabled: _busyNzbUrl == null,
                         onPlay: () => _play(item),
@@ -573,6 +620,9 @@ class _Sidebar extends StatelessWidget {
     required this.tagNewest,
     required this.selectedFeedId,
     required this.selectedTagId,
+    required this.favoritesCount,
+    required this.favoritesSelected,
+    required this.onSelectFavorites,
     required this.onSelectFeed,
     required this.onSelectTag,
     required this.onAddFeed,
@@ -588,6 +638,9 @@ class _Sidebar extends StatelessWidget {
   final Map<String, DateTime> tagNewest;
   final String? selectedFeedId;
   final String? selectedTagId;
+  final int favoritesCount;
+  final bool favoritesSelected;
+  final VoidCallback onSelectFavorites;
   final ValueChanged<RssFeed> onSelectFeed;
   final ValueChanged<RssTag> onSelectTag;
   final VoidCallback onAddFeed;
@@ -618,6 +671,28 @@ class _Sidebar extends StatelessWidget {
             onEdit: () => onEditFeed(feed),
             onDelete: () => onDeleteFeed(feed),
           ),
+        if (favoritesCount > 0) ...[
+          const SizedBox(height: 12),
+          ListTile(
+            dense: true,
+            selected: favoritesSelected,
+            leading: const Icon(Icons.favorite_rounded, size: 18),
+            title: Text(l10n.rssFavorites),
+            trailing: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(
+                '$favoritesCount',
+                style: TextStyle(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.5),
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            onTap: onSelectFavorites,
+          ),
+        ],
         const SizedBox(height: 12),
         _SectionHeader(
           title: l10n.rssTags,
@@ -786,11 +861,15 @@ class _ItemCard extends StatelessWidget {
     required this.saving,
     required this.saveEnabled,
     required this.onSave,
+    required this.favorite,
+    required this.onToggleFavorite,
     this.feedName,
   });
 
   final RssItem item;
   final String? feedName;
+  final bool favorite;
+  final VoidCallback onToggleFavorite;
   final bool busy;
   final bool enabled;
   final VoidCallback onPlay;
@@ -842,18 +921,43 @@ class _ItemCard extends StatelessWidget {
                       height: 1.25,
                     ),
                   ),
-                  if (meta.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      meta,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: foreground.withValues(alpha: 0.5),
-                        fontSize: 11,
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Tooltip(
+                        message: favorite
+                            ? l10n.rssRemoveFavorite
+                            : l10n.rssAddFavorite,
+                        child: InkResponse(
+                          onTap: onToggleFavorite,
+                          radius: 14,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: Icon(
+                              favorite
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              size: 14,
+                              color: favorite
+                                  ? Colors.redAccent
+                                  : foreground.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                      Expanded(
+                        child: Text(
+                          meta,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: foreground.withValues(alpha: 0.5),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

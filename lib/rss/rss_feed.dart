@@ -159,6 +159,49 @@ class RssItem {
   final int? sizeBytes;
   final DateTime? published;
   final String? category;
+
+  Map<String, Object?> toJson() => {
+    'title': title,
+    'nzbUrl': nzbUrl,
+    'feedId': feedId,
+    'sizeBytes': ?sizeBytes,
+    'published': ?published?.toUtc().toIso8601String(),
+    'category': ?category,
+  };
+
+  static RssItem? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final title = value['title'];
+    final nzbUrl = value['nzbUrl'];
+    final feedId = value['feedId'];
+    if (title is! String || nzbUrl is! String || feedId is! String) {
+      return null;
+    }
+    final sizeBytes = value['sizeBytes'];
+    final published = value['published'];
+    final category = value['category'];
+    return RssItem(
+      title: title,
+      nzbUrl: nzbUrl,
+      feedId: feedId,
+      sizeBytes: sizeBytes is int ? sizeBytes : null,
+      published: published is String ? DateTime.tryParse(published) : null,
+      category: category is String ? category : null,
+    );
+  }
+}
+
+String rssFavoriteKey(RssItem item) => '${item.feedId}\n${item.nzbUrl}';
+
+List<RssItem> toggleRssFavorite(List<RssItem> favorites, RssItem item) {
+  final key = rssFavoriteKey(item);
+  final remaining = [
+    for (final favorite in favorites)
+      if (rssFavoriteKey(favorite) != key) favorite,
+  ];
+  return remaining.length == favorites.length
+      ? [item, ...favorites]
+      : remaining;
 }
 
 List<RssItem> parseRssItems(String body, {required String feedId}) {

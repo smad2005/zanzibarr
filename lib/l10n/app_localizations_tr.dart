@@ -838,4 +838,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get rssTitleCopied => 'Başlık kopyalandı';
+
+  @override
+  String get rssFavorites => 'Favoriler';
+
+  @override
+  String get rssAddFavorite => 'Favorilere ekle';
+
+  @override
+  String get rssRemoveFavorite => 'Favorilerden çıkar';
 }

@@ -1591,6 +1591,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Title copied'**
   String get rssTitleCopied;
+
+  /// No description provided for @rssFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get rssFavorites;
+
+  /// No description provided for @rssAddFavorite.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to favorites'**
+  String get rssAddFavorite;
+
+  /// No description provided for @rssRemoveFavorite.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from favorites'**
+  String get rssRemoveFavorite;
 }
 
 class _AppLocalizationsDelegate

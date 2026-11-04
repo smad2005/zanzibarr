@@ -226,5 +226,8 @@
   "rssFilterHint": "Фильтр по названию…",
   "rssDownloadNzb": "Скачать NZB",
   "rssSaved": "Сохранено: {path}",
-  "rssTitleCopied": "Название скопировано"
+  "rssTitleCopied": "Название скопировано",
+  "rssFavorites": "Избранное",
+  "rssAddFavorite": "Добавить в избранное",
+  "rssRemoveFavorite": "Убрать из избранного"
 }
