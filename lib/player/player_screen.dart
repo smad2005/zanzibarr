@@ -181,6 +181,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _controlBusy = false;
   bool _disposing = false;
   bool _isPictureInPicture = false;
+  bool _pictureInPictureEntering = false;
+  StreamSubscription<PictureInPictureChange>? _pictureInPictureSubscription;
   bool _controlsVisible = true;
   bool _playing = false;
   bool _scrubbing = false;
@@ -304,6 +306,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _playback.onDvReshapeStatusChanged = _onDvReshapeStatusChanged;
     _pictureInPictureWindow =
         widget.pictureInPictureWindow ?? NativePictureInPictureWindow();
+    _pictureInPictureSubscription = _pictureInPictureWindow.changes.listen(
+      _onPictureInPictureChanged,
+    );
     _preferenceStore = widget.preferenceStore ?? MediaPreferencesStore();
     _historyStore = widget.historyStore ?? PlaybackHistoryStore();
     _castService = widget.castService ?? AppCastService();
@@ -374,7 +379,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       previous: previous,
       current: current,
       ready: _playbackReady,
-      pictureInPicture: _isPictureInPicture,
+      pictureInPicture: _isPictureInPicture || _pictureInPictureEntering,
       fullscreen: isFullscreen,
     )) {
       return;
@@ -1275,6 +1280,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _tracksSubscription,
       _trackSubscription,
       _volumeSubscription,
+      _pictureInPictureSubscription,
     ];
     unawaited(_disposeResources(subscriptions));
     super.dispose();
@@ -2439,9 +2445,18 @@ class _PlayerScreenState extends State<PlayerScreen>
       await videoState!.exitFullscreen();
       if (!mounted) return;
     }
-    final changed = enter
-        ? await _pictureInPictureWindow.enter()
-        : await _pictureInPictureWindow.exit();
+    _pictureInPictureEntering = enter;
+    final bool changed;
+    try {
+      changed = enter
+          ? await _pictureInPictureWindow.enter(
+              width: _player.state.width,
+              height: _player.state.height,
+            )
+          : await _pictureInPictureWindow.exit();
+    } finally {
+      _pictureInPictureEntering = false;
+    }
     if (!mounted) return;
     if (!changed) {
       _showPictureInPictureUnavailable();
@@ -2450,6 +2465,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _isPictureInPicture = enter);
     _revealControls();
   }
+
+  void _onPictureInPictureChanged(PictureInPictureChange change) {
+    if (!mounted || _disposing) return;
+    setState(() => _isPictureInPicture = change.active);
+    if (change.dismissed) {
+      unawaited(_player.pause());
+    } else if (!change.active) {
+      _revealControls();
+    }
+  }
+
+  bool get _systemPictureInPicture =>
+      _isPictureInPicture && defaultTargetPlatform == TargetPlatform.android;
 
   void _showPictureInPictureUnavailable() {
     if (!mounted) return;
@@ -3228,7 +3256,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         controller: _videoController,
         fit: _videoFill ? BoxFit.cover : BoxFit.contain,
         filterQuality: FilterQuality.high,
-        controls: (_) => PlayerKeyboardControls(
+        controls: (_) => _systemPictureInPicture
+            ? const SizedBox.shrink()
+            : PlayerKeyboardControls(
           handler: this,
           focusNode: _keyboardFocusNode,
           child: Builder(
