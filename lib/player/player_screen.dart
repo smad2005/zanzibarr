@@ -34,6 +34,22 @@ import 'subtitle_fonts.dart';
 /// Akış: güvenli depodan sağlayıcı bilgisi → `startStream` (Rust server'ı
 /// ayağa kaldırıp URL döndürür) → media_kit `Player.open(url)`. Seek,
 /// player'ın kendi kontrolüyle yapılır; server Range isteklerini karşılar.
+@visibleForTesting
+bool shouldAutoEnterFullscreen({
+  required TargetPlatform platform,
+  required Orientation? previous,
+  required Orientation current,
+  required bool ready,
+  required bool pictureInPicture,
+  required bool fullscreen,
+}) =>
+    (platform == TargetPlatform.android || platform == TargetPlatform.iOS) &&
+    previous == Orientation.portrait &&
+    current == Orientation.landscape &&
+    ready &&
+    !pictureInPicture &&
+    !fullscreen;
+
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -251,6 +267,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _audioReasserted = false;
   // Video sığdırma kipi: false=contain (oran korunur), true=cover (doldur).
   bool _videoFill = false;
+  Orientation? _lastOrientation;
 
   @override
   void initState() {
@@ -336,6 +353,33 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_engineStatus.isEmpty) {
       _engineStatus = AppLocalizations.of(context).engineBadgePreparing;
     }
+    _lastOrientation ??= _viewOrientation();
+  }
+
+  Orientation _viewOrientation() {
+    final size = View.of(context).physicalSize;
+    return size.width > size.height
+        ? Orientation.landscape
+        : Orientation.portrait;
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted || _disposing) return;
+    final current = _viewOrientation();
+    final previous = _lastOrientation;
+    _lastOrientation = current;
+    if (!shouldAutoEnterFullscreen(
+      platform: defaultTargetPlatform,
+      previous: previous,
+      current: current,
+      ready: _playbackReady,
+      pictureInPicture: _isPictureInPicture,
+      fullscreen: isFullscreen,
+    )) {
+      return;
+    }
+    unawaited(_videoKey.currentState?.enterFullscreen());
   }
 
   Future<void> _start() async {
