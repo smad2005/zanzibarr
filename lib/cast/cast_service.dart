@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dart_cast/dart_cast.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 /// UI katmanının ihtiyaç duyduğu dart_cast tipleri buradan dışa açılır;
 /// ekranlar paketi doğrudan içe aktarmaz.
@@ -63,20 +64,22 @@ abstract class CastController {
 
 /// Uygulama seviyesi cast servisi: dart_cast'i zanzibarr'ın ihtiyaçlarına
 /// indirger. Chromecast birincil hedef; AirPlay best-effort (alıcı desteği
-/// donanıma bağlı). DLNA bu turda kapsam dışı.
+/// donanıma bağlı).
 class AppCastService implements CastController {
   AppCastService()
     : _service = CastService(
         discoveryProviders: [
           ChromecastDiscoveryProvider(),
           AirPlayDiscoveryProvider(),
+          DlnaDiscoveryProvider(),
         ],
-        sessionFactory: _createSession,
+        sessionFactory: createSession,
       );
 
   final CastService _service;
 
-  static CastSession _createSession(CastDevice device) {
+  @visibleForTesting
+  static CastSession createSession(CastDevice device) {
     switch (device.protocol) {
       case CastProtocol.chromecast:
         return ChromecastSession(
@@ -89,8 +92,30 @@ class AppCastService implements CastController {
           mediaTransformer: const _DirectUrlTransformer(),
         );
       case CastProtocol.dlna:
-        throw UnsupportedError('DLNA is not supported yet');
+        return _createDlnaSession(device);
     }
+  }
+
+  static CastSession _createDlnaSession(CastDevice device) {
+    final avTransport = device.metadata['avTransportControlUrl'];
+    if (avTransport == null || avTransport.isEmpty) {
+      throw ArgumentError('DLNA device has no AVTransport control URL');
+    }
+    return DlnaSession(
+      device: device,
+      description: DlnaDeviceDescription(
+        friendlyName: device.name,
+        udn: device.id,
+        manufacturer: device.metadata['manufacturer'],
+        modelName: device.metadata['modelName'],
+        avTransportControlUrl: avTransport,
+        renderingControlUrl: device.metadata['renderingControlUrl'],
+        connectionManagerControlUrl:
+            device.metadata['connectionManagerControlUrl'],
+        locationUrl: 'http://${device.address.address}:${device.port}',
+      ),
+      mediaTransformer: const _DirectUrlTransformer(),
+    );
   }
 
   /// Aktif cast oturumu; bağlı cihaz yoksa null.
@@ -103,7 +128,11 @@ class AppCastService implements CastController {
     Duration timeout = const Duration(seconds: 10),
   }) {
     return _service.startDiscovery(
-      protocols: {CastProtocol.chromecast, CastProtocol.airplay},
+      protocols: {
+        CastProtocol.chromecast,
+        CastProtocol.airplay,
+        CastProtocol.dlna,
+      },
       timeout: timeout,
     );
   }

@@ -24,6 +24,42 @@ void main() {
     });
   });
 
+  group('AppCastService.createSession', () {
+    CastDevice dlnaDevice(Map<String, String> metadata) => CastDevice(
+      id: 'uuid:kodi',
+      name: 'Kodi',
+      protocol: CastProtocol.dlna,
+      address: InternetAddress('192.168.1.30'),
+      port: 1593,
+      metadata: metadata,
+    );
+
+    test('creates a DLNA session when AVTransport URL is present', () {
+      final session = AppCastService.createSession(
+        dlnaDevice({
+          'avTransportControlUrl':
+              'http://192.168.1.30:1593/AVTransport/control.xml',
+          'renderingControlUrl':
+              'http://192.168.1.30:1593/RenderingControl/control.xml',
+        }),
+      );
+      expect(session, isA<DlnaSession>());
+    });
+
+    test('throws ArgumentError when AVTransport URL is missing', () {
+      expect(
+        () => AppCastService.createSession(dlnaDevice(const {})),
+        throwsArgumentError,
+      );
+      expect(
+        () => AppCastService.createSession(
+          dlnaDevice(const {'avTransportControlUrl': ''}),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('CastDevicePicker', () {
     testWidgets('cihaz listelenir ve seçim diyaloğu kapatır', (tester) async {
       final service = FakeCastController([
