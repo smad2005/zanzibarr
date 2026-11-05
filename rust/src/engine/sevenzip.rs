@@ -32,7 +32,8 @@ use zesven::Password;
 
 use super::archive::{
     cancellation_requested, run_blocking_cancellable, validate_range, BlockingArchiveReader,
-    BlockingTaskError, NntpVolumeSet, VolumeSetError,
+    ArchiveMember, BlockingTaskError, NntpVolumeSet, VolumeSetError, DELIVERY_DECODE,
+    DELIVERY_STREAM,
 };
 use super::nntp::{NntpPool, TlsNntpConnector};
 use super::nzb::{is_playable_media_filename, NzbFile};
@@ -52,6 +53,8 @@ pub enum SevenZipError {
     Header(String),
     #[error("no playable media file in the 7z archive")]
     NoPlayableMedia,
+    #[error("entry `{0}` is not in the 7z archive")]
+    MemberNotFound(String),
     #[error("7z archive uses an unsupported codec/layout (BCJ, PPMd, multi-pack folder, etc.); COPY, AES, LZMA and LZMA2 are supported")]
     UnsupportedCompression,
     #[error("password-protected 7z archive but the NZB has no password metadata")]
@@ -163,13 +166,14 @@ impl SevenZipEntrySource {
         // CLI/test çağrılarında iptal sahibi yoktur; sender bu await boyunca
         // canlı tutularak receiver'ın kapanması yanlış iptal sayılmaz.
         let (_cancellation_guard, cancellation) = watch::channel(false);
-        Self::new_cancellable(pool, files, password, cancellation).await
+        Self::new_cancellable(pool, files, password, None, cancellation).await
     }
 
     pub async fn new_cancellable(
         pool: Arc<NntpPool<TlsNntpConnector>>,
         files: Vec<NzbFile>,
         password: Option<String>,
+        member: Option<String>,
         mut cancellation: watch::Receiver<bool>,
     ) -> Result<Self, SevenZipError> {
         let archive =
@@ -182,7 +186,7 @@ impl SevenZipEntrySource {
         let plan = run_blocking_cancellable(cancellation.clone(), move |reader_cancellation| {
             let mut reader =
                 BlockingArchiveReader::new(archive_for_parser, runtime, reader_cancellation);
-            parse_entry_plan(&mut reader, archive_len, password)
+            parse_entry_plan(&mut reader, archive_len, password, member.as_deref())
         })
         .await?;
 
@@ -299,15 +303,87 @@ fn parse_entry_plan<R: Read + Seek>(
     reader: &mut R,
     archive_len: u64,
     password: Option<String>,
+    member: Option<&str>,
 ) -> Result<EntryPlan, SevenZipError> {
-    preflight_archive_size(reader, archive_len)?;
-
     let password = password.map(Password::new);
+    let header = read_header_for_planning(reader, archive_len, password.as_ref())?;
+    plan_from_header_for(&header, archive_len, password.as_ref(), member)
+}
+
+fn read_header_for_planning<R: Read + Seek>(
+    reader: &mut R,
+    archive_len: u64,
+    password: Option<&Password>,
+) -> Result<ArchiveHeader, SevenZipError> {
+    preflight_archive_size(reader, archive_len)?;
     let limits = ResourceLimits::default()
         .max_entry_unpacked(256 * 1024 * 1024 * 1024)
         .max_total_unpacked(512 * 1024 * 1024 * 1024);
-    let header = read_standard_archive_header(reader, archive_len, &limits, password.as_ref())?;
-    plan_from_header(&header, archive_len, password.as_ref())
+    read_standard_archive_header(reader, archive_len, &limits, password)
+}
+
+fn members_from_header(header: &ArchiveHeader) -> Vec<ArchiveMember> {
+    let Some(info) = header.files_info.as_ref() else {
+        return Vec::new();
+    };
+    let folders: &[Folder] = header
+        .unpack_info
+        .as_ref()
+        .map(|unpack| unpack.folders.as_slice())
+        .unwrap_or_default();
+    let streams_per_folder = header
+        .substreams_info
+        .as_ref()
+        .map(|substreams| substreams.num_unpack_streams_in_folders.clone())
+        .unwrap_or_else(|| vec![1; folders.len()]);
+
+    let mut members = Vec::new();
+    let mut folder_index = 0usize;
+    let mut remaining_in_folder = streams_per_folder.first().copied().unwrap_or(0);
+    for entry in info.entries.iter().filter(|entry| entry.has_stream) {
+        while folder_index < folders.len() && remaining_in_folder == 0 {
+            folder_index += 1;
+            remaining_in_folder = streams_per_folder.get(folder_index).copied().unwrap_or(0);
+        }
+        remaining_in_folder = remaining_in_folder.saturating_sub(1);
+        if !is_playable_media_filename(&entry.name) {
+            continue;
+        }
+        let compressed = folders.get(folder_index).is_some_and(|folder| {
+            folder.coders.iter().any(|coder| {
+                matches!(
+                    coder.method_id.as_slice(),
+                    m if m == method::LZMA || m == method::LZMA2
+                )
+            })
+        });
+        members.push(ArchiveMember {
+            name: entry.name.clone(),
+            unpacked_size: entry.size,
+            part_count: 1,
+            delivery: if compressed { DELIVERY_DECODE } else { DELIVERY_STREAM },
+        });
+    }
+    members
+}
+
+pub(crate) async fn list_playable_members(
+    pool: Arc<NntpPool<TlsNntpConnector>>,
+    files: Vec<NzbFile>,
+    password: Option<String>,
+    mut cancellation: watch::Receiver<bool>,
+) -> Result<Vec<ArchiveMember>, SevenZipError> {
+    let archive = Arc::new(NntpVolumeSet::new_cancellable(pool, files, &mut cancellation).await?);
+    ensure_not_cancelled(&cancellation)?;
+    let archive_len = archive.total_len();
+    let runtime = tokio::runtime::Handle::current();
+    run_blocking_cancellable(cancellation, move |reader_cancellation| {
+        let mut reader = BlockingArchiveReader::new(archive, runtime, reader_cancellation);
+        let password = password.map(Password::new);
+        let header = read_header_for_planning(&mut reader, archive_len, password.as_ref())?;
+        Ok(members_from_header(&header))
+    })
+    .await
 }
 
 /// 7z başlangıç ve next-header CRC'lerini doğrular; plain başlığı doğrudan,
@@ -713,10 +789,20 @@ fn preflight_archive_size<R: Read + Seek>(
     Ok(())
 }
 
+#[cfg(test)]
 fn plan_from_header(
     header: &ArchiveHeader,
     archive_len: u64,
     password: Option<&Password>,
+) -> Result<EntryPlan, SevenZipError> {
+    plan_from_header_for(header, archive_len, password, None)
+}
+
+fn plan_from_header_for(
+    header: &ArchiveHeader,
+    archive_len: u64,
+    password: Option<&Password>,
+    member: Option<&str>,
 ) -> Result<EntryPlan, SevenZipError> {
     let pack_info = header
         .pack_info
@@ -764,9 +850,14 @@ fn plan_from_header(
             ));
         }
 
-        if is_playable_media_filename(&entry.name)
-            && selected.is_none_or(|(current, _, _)| entry.size > current.size)
-        {
+        let wanted = match member {
+            Some(name) => selected.is_none() && entry.name == name,
+            None => {
+                is_playable_media_filename(&entry.name)
+                    && selected.is_none_or(|(current, _, _)| entry.size > current.size)
+            }
+        };
+        if wanted {
             selected = Some((entry, folder_index, folder_prefix));
         }
         folder_prefix = folder_prefix
@@ -775,7 +866,10 @@ fn plan_from_header(
         remaining_in_folder -= 1;
     }
 
-    let (entry, folder_index, prefix_skip) = selected.ok_or(SevenZipError::NoPlayableMedia)?;
+    let (entry, folder_index, prefix_skip) = selected.ok_or_else(|| match member {
+        Some(name) => SevenZipError::MemberNotFound(name.to_string()),
+        None => SevenZipError::NoPlayableMedia,
+    })?;
 
     let folder = &folders[folder_index];
     if folder.packed_streams.len() != 1 {
@@ -900,7 +994,14 @@ fn plan_from_header(
                 iv,
             })
         } else {
-            if packed_size != entry.size {
+            let fits = if streams_per_folder[folder_index] > 1 {
+                prefix_skip
+                    .checked_add(entry.size)
+                    .is_some_and(|end| end <= packed_size)
+            } else {
+                packed_size == entry.size
+            };
+            if !fits {
                 return Err(SevenZipError::InvalidLayout(format!(
                     "COPY pack boyutu {packed_size}, medya boyutu {}",
                     entry.size
@@ -911,10 +1012,16 @@ fn plan_from_header(
         (aes, PackingPlan::Direct)
     };
 
+    let packed_range = if aes.is_none() && matches!(packing, PackingPlan::Direct) {
+        let start = packed_start + prefix_skip;
+        start..start + entry.size
+    } else {
+        packed_start..packed_end
+    };
     Ok(EntryPlan {
         filename: entry.name.clone(),
         decoded_size: entry.size,
-        packed_range: packed_start..packed_end,
+        packed_range,
         aes,
         packing,
     })
@@ -1115,6 +1222,107 @@ mod tests {
             panic!("solid folder must produce a Compressed plan");
         };
         assert_eq!(compressed.prefix_skip, 100);
+    }
+
+    fn two_episode_folder(method_id: &[u8], properties: Option<Vec<u8>>) -> ArchiveHeader {
+        let mut header = header_with(method_id, properties, 300);
+        header
+            .substreams_info
+            .as_mut()
+            .unwrap()
+            .num_unpack_streams_in_folders = vec![2];
+        let entries = &mut header.files_info.as_mut().unwrap().entries;
+        entries[0].name = "Show/Show.S01E01.mkv".into();
+        entries[0].size = 100;
+        entries.push(ArchiveEntry {
+            name: "Show/Show.S01E02.mkv".into(),
+            is_directory: false,
+            is_anti: false,
+            has_stream: true,
+            size: 200,
+            crc: None,
+            ctime: None,
+            atime: None,
+            mtime: None,
+            attributes: None,
+        });
+        header
+    }
+
+    #[test]
+    fn members_from_header_lists_playable_streams() {
+        let mut header = two_episode_folder(method::LZMA2, Some(vec![0]));
+        header.files_info.as_mut().unwrap().entries.push(ArchiveEntry {
+            name: "Show/readme.txt".into(),
+            is_directory: false,
+            is_anti: false,
+            has_stream: true,
+            size: 5,
+            crc: None,
+            ctime: None,
+            atime: None,
+            mtime: None,
+            attributes: None,
+        });
+        let members = members_from_header(&header);
+        assert_eq!(
+            members,
+            vec![
+                ArchiveMember {
+                    name: "Show/Show.S01E01.mkv".into(),
+                    unpacked_size: 100,
+                    part_count: 1,
+                    delivery: DELIVERY_DECODE,
+                },
+                ArchiveMember {
+                    name: "Show/Show.S01E02.mkv".into(),
+                    unpacked_size: 200,
+                    part_count: 1,
+                    delivery: DELIVERY_DECODE,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn members_from_copy_folder_stream_directly() {
+        let header = two_episode_folder(method::COPY, None);
+        let members = members_from_header(&header);
+        assert_eq!(members.len(), 2);
+        assert!(members.iter().all(|member| member.delivery == DELIVERY_STREAM));
+    }
+
+    #[test]
+    fn member_selection_in_solid_folder_uses_requested_entry() {
+        let header = two_episode_folder(method::LZMA2, Some(vec![0]));
+        let plan =
+            plan_from_header_for(&header, 500, None, Some("Show/Show.S01E01.mkv")).unwrap();
+        assert_eq!(plan.filename, "Show/Show.S01E01.mkv");
+        assert_eq!(plan.decoded_size, 100);
+        let PackingPlan::Compressed(compressed) = &plan.packing else {
+            panic!("solid folder must produce a Compressed plan");
+        };
+        assert_eq!(compressed.prefix_skip, 0);
+    }
+
+    #[test]
+    fn member_selection_in_copy_folder_offsets_pack_range() {
+        let header = two_episode_folder(method::COPY, None);
+        let first = plan_from_header_for(&header, 500, None, Some("Show/Show.S01E01.mkv")).unwrap();
+        assert_eq!(first.packed_range, 132..232);
+        let second = plan_from_header(&header, 500, None).unwrap();
+        assert_eq!(second.filename, "Show/Show.S01E02.mkv");
+        assert_eq!(second.packed_range, 232..432);
+        assert!(matches!(second.packing, PackingPlan::Direct));
+    }
+
+    #[test]
+    fn member_selection_reports_missing_7z_entry() {
+        let header = two_episode_folder(method::COPY, None);
+        assert!(matches!(
+            plan_from_header_for(&header, 500, None, Some("Show/Show.S01E03.mkv")),
+            Err(SevenZipError::MemberNotFound(name)) if name == "Show/Show.S01E03.mkv"
+        ));
     }
 
     #[test]

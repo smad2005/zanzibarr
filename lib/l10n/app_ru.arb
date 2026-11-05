@@ -189,6 +189,10 @@
   "entryPickerSubtitle": "This NZB contains multiple videos — pick one to start streaming.",
   "entryKindDirect": "Video",
   "entryKindArchive": "Archive",
+  "entryDeliveryStream": "Архив без сжатия — видео стримится напрямую, перемотка мгновенная.",
+  "entryDeliveryDecode": "Сжатый архив — распаковывается на лету; поздние серии стартуют дольше, перемотка назад медленнее.",
+  "entryDeliveryDownload": "Сжатый RAR — сначала скачивается весь архив, затем распаковывается серия. Запуск займёт время.",
+  "entryDeliveryMixed": "Часть файлов стримится напрямую, остальные нужно сначала распаковать или скачать.",
   "entryParts": "{count} parts",
   "@entryParts": {
     "placeholders": {

@@ -222,6 +222,10 @@
   "entryPickerSubtitle": "Bu NZB birden çok video içeriyor — oynatmak için birini seç.",
   "entryKindDirect": "Video",
   "entryKindArchive": "Arşiv",
+  "entryDeliveryStream": "Sıkıştırmasız arşiv — doğrudan akış, ileri/geri sarma anında.",
+  "entryDeliveryDecode": "Sıkıştırılmış arşiv — oynatılırken açılır; sonraki bölümlerin başlaması ve geri sarma daha yavaş.",
+  "entryDeliveryDownload": "Sıkıştırılmış RAR — önce arşivin tamamı indirilir, ardından bölüm açılır. Başlaması zaman alır.",
+  "entryDeliveryMixed": "Bazı dosyalar doğrudan akar, diğerlerinin önce açılması veya indirilmesi gerekir.",
   "entryParts": "{count} parça",
   "@entryParts": {
     "placeholders": {

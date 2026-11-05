@@ -41,7 +41,8 @@ use zeroize::Zeroizing;
 
 use super::archive::{
     cancellation_requested, run_blocking_cancellable, validate_range, BlockingArchiveReader,
-    BlockingTaskError, NntpVolumeSet, VolumeSetError,
+    ArchiveMember, BlockingTaskError, NntpVolumeSet, VolumeSetError, DELIVERY_DOWNLOAD,
+    DELIVERY_STREAM,
 };
 use super::nntp::{NntpPool, TlsNntpConnector};
 use super::nzb::{is_playable_media_filename, NzbFile};
@@ -106,6 +107,8 @@ pub enum RarError {
     Header(String),
     #[error("no playable media file in the RAR archive")]
     NoPlayableMedia,
+    #[error("entry `{0}` is not in the RAR archive")]
+    MemberNotFound(String),
     #[error("RAR archive is compressed; only STORE archives are playable with seeking")]
     UnsupportedCompression,
     #[error("RAR4 password protection is unsupported (outside RAR5 -hp scope); unencrypted or RAR5 set required")]
@@ -325,13 +328,14 @@ impl RarEntrySource {
         // CLI/test çağrılarında iptal sahibi yoktur; sender bu await boyunca
         // canlı tutularak receiver'ın kapanması yanlış iptal sayılmaz.
         let (_cancellation_guard, cancellation) = watch::channel(false);
-        Self::new_cancellable(pool, files, password, cancellation).await
+        Self::new_cancellable(pool, files, password, None, cancellation).await
     }
 
     pub async fn new_cancellable(
         pool: Arc<NntpPool<TlsNntpConnector>>,
         files: Vec<NzbFile>,
         password: Option<String>,
+        member: Option<String>,
         mut cancellation: watch::Receiver<bool>,
     ) -> Result<Self, RarError> {
         let archive =
@@ -346,7 +350,7 @@ impl RarEntrySource {
         let map = run_blocking_cancellable(cancellation, move |reader_cancellation| {
             let mut reader =
                 BlockingArchiveReader::new(archive_for_parser, runtime, reader_cancellation);
-            build_fragment_map(&mut reader, &layout, password.as_deref())
+            build_fragment_map_for(&mut reader, &layout, password.as_deref(), member.as_deref())
         })
         .await?;
 
@@ -1309,13 +1313,63 @@ fn skip_slice(cursor: &mut io::Cursor<&[u8]>, count: u64, label: &str) -> Result
 /// Cilt düzeni verilen sanal kaynaktan oynatma planını kurar: her cildi
 /// tarar, aynı isimli split parçalarını zincirler, en büyük oynatılabilir
 /// medyayı seçer ve parça eşlemini doğrular.
+#[cfg(test)]
 fn build_fragment_map<R: Read + Seek>(
     reader: &mut R,
     volumes: &[(u64, u64)],
     password: Option<&str>,
 ) -> Result<FragmentMap, RarError> {
-    let parts = collect_playable_parts(reader, volumes, password)?;
+    build_fragment_map_for(reader, volumes, password, None)
+}
+
+fn build_fragment_map_for<R: Read + Seek>(
+    reader: &mut R,
+    volumes: &[(u64, u64)],
+    password: Option<&str>,
+    member: Option<&str>,
+) -> Result<FragmentMap, RarError> {
+    let parts = collect_playable_parts(reader, volumes, password, member)?;
     validate_and_build(&parts, password)
+}
+
+fn list_members<R: Read + Seek>(
+    reader: &mut R,
+    volumes: &[(u64, u64)],
+    password: Option<&str>,
+) -> Result<Vec<ArchiveMember>, RarError> {
+    Ok(collect_file_groups(reader, volumes, password)?
+        .into_iter()
+        .filter(|(_, parts)| is_playable_media_filename(&parts[0].entry.name))
+        .map(|(_, parts)| ArchiveMember {
+            name: parts[0].entry.name.clone(),
+            unpacked_size: parts[0].entry.unpacked_size,
+            part_count: parts.len(),
+            delivery: if parts.iter().all(|part| part.entry.store && !part.entry.solid) {
+                DELIVERY_STREAM
+            } else {
+                DELIVERY_DOWNLOAD
+            },
+        })
+        .collect())
+}
+
+pub(crate) async fn list_playable_members(
+    pool: Arc<NntpPool<TlsNntpConnector>>,
+    files: Vec<NzbFile>,
+    password: Option<String>,
+    mut cancellation: watch::Receiver<bool>,
+) -> Result<Vec<ArchiveMember>, RarError> {
+    let archive = Arc::new(NntpVolumeSet::new_cancellable(pool, files, &mut cancellation).await?);
+    ensure_not_cancelled(&cancellation)?;
+    let layout: Vec<(u64, u64)> = (0..archive.volume_count())
+        .map(|index| (archive.volume_start(index), archive.volume_len(index)))
+        .collect();
+    let runtime = tokio::runtime::Handle::current();
+    run_blocking_cancellable(cancellation, move |reader_cancellation| {
+        let mut reader = BlockingArchiveReader::new(archive, runtime, reader_cancellation);
+        list_members(&mut reader, &layout, password.as_deref())
+    })
+    .await
 }
 
 /// Tüm ciltlerin başlıklarını yürüyüp oynatılabilir en büyük dosyanın parça
@@ -1326,7 +1380,30 @@ fn collect_playable_parts<R: Read + Seek>(
     reader: &mut R,
     volumes: &[(u64, u64)],
     password: Option<&str>,
+    member: Option<&str>,
 ) -> Result<Vec<FragmentPart>, RarError> {
+    let mut groups = collect_file_groups(reader, volumes, password)?;
+    let index = match member {
+        Some(name) => groups
+            .iter()
+            .position(|(_, parts)| parts[0].entry.name == name)
+            .ok_or_else(|| RarError::MemberNotFound(name.to_string()))?,
+        None => groups
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, parts))| is_playable_media_filename(&parts[0].entry.name))
+            .max_by_key(|(_, (_, parts))| parts[0].entry.unpacked_size)
+            .map(|(index, _)| index)
+            .ok_or(RarError::NoPlayableMedia)?,
+    };
+    Ok(groups.swap_remove(index).1)
+}
+
+fn collect_file_groups<R: Read + Seek>(
+    reader: &mut R,
+    volumes: &[(u64, u64)],
+    password: Option<&str>,
+) -> Result<Vec<(String, Vec<FragmentPart>)>, RarError> {
     // (küçük harf ad) -> parça listesi; ekleme sırası korunur.
     let mut groups: Vec<(String, Vec<FragmentPart>)> = Vec::new();
     // Ciltler arası KDF önbelleği: aynı salt'ı taşıyan -hp ciltlerinde pahalı
@@ -1372,23 +1449,7 @@ fn collect_playable_parts<R: Read + Seek>(
         }
     }
 
-    // Oynatılabilir gruplar arasından en büyüğü seç. unpacked_size her
-    // parçanın başlığında toplam dosya boyutunu taşır.
-    let index = groups
-        .iter()
-        .position(|(_, parts)| is_playable_media_filename(&parts[0].entry.name))
-        .and_then(|_| {
-            groups
-                .iter()
-                .enumerate()
-                .filter(|(_, (_, parts))| {
-                    is_playable_media_filename(&parts[0].entry.name)
-                })
-                .max_by_key(|(_, (_, parts))| parts[0].entry.unpacked_size)
-                .map(|(index, _)| index)
-        })
-        .ok_or(RarError::NoPlayableMedia)?;
-    Ok(groups.swap_remove(index).1)
+    Ok(groups)
 }
 
 /// Sıkıştırılmış (STORE olmayan) bir RAR setinin oynatılacak üyesinin planı.
@@ -1405,6 +1466,7 @@ pub(crate) async fn probe_compressed_plan(
     pool: Arc<NntpPool<TlsNntpConnector>>,
     files: Vec<NzbFile>,
     password: Option<String>,
+    member: Option<String>,
     mut cancellation: watch::Receiver<bool>,
 ) -> Result<Option<(CompressedRarPlan, Arc<NntpVolumeSet>)>, RarError> {
     let archive = Arc::new(NntpVolumeSet::new_cancellable(pool, files, &mut cancellation).await?);
@@ -1419,7 +1481,7 @@ pub(crate) async fn probe_compressed_plan(
     let parts = run_blocking_cancellable(cancellation, move |reader_cancellation| {
         let mut reader =
             BlockingArchiveReader::new(archive_for_parser, runtime, reader_cancellation);
-        collect_playable_parts(&mut reader, &layout, password.as_deref())
+        collect_playable_parts(&mut reader, &layout, password.as_deref(), member.as_deref())
     })
     .await?;
 
@@ -2259,6 +2321,102 @@ mod tests {
             build_fragment_map(&mut Cursor::new(bytes), &layout(&[volume]), None),
             Err(RarError::NoPlayableMedia)
         ));
+    }
+
+    fn multi_episode_volumes() -> Vec<Vec<u8>> {
+        let e01 = vec![1u8; 300];
+        let e02_a = vec![2u8; 100];
+        let e02_b = vec![3u8; 50];
+        let mut e02_first = store_spec("Show/Show.S01E02.mkv", 150, &e02_a);
+        e02_first.split_after = true;
+        let mut e02_last = store_spec("Show/Show.S01E02.mkv", 150, &e02_b);
+        e02_last.split_before = true;
+        vec![
+            volume(&[
+                file_block(&store_spec("Show/Show.S01E01.mkv", 300, &e01)),
+                file_block(&store_spec("Show/cover.jpg", 10, &[9u8; 10])),
+                file_block(&e02_first),
+            ]),
+            volume(&[file_block(&e02_last)]),
+        ]
+    }
+
+    #[test]
+    fn list_members_returns_playable_entries_in_archive_order() {
+        let volumes = multi_episode_volumes();
+        let members =
+            list_members(&mut Cursor::new(concat(&volumes)), &layout(&volumes), None).unwrap();
+        assert_eq!(
+            members,
+            vec![
+                ArchiveMember {
+                    name: "Show/Show.S01E01.mkv".into(),
+                    unpacked_size: 300,
+                    part_count: 1,
+                    delivery: DELIVERY_STREAM,
+                },
+                ArchiveMember {
+                    name: "Show/Show.S01E02.mkv".into(),
+                    unpacked_size: 150,
+                    part_count: 2,
+                    delivery: DELIVERY_STREAM,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn list_members_marks_compressed_entries_for_download() {
+        let mut compressed = store_spec("Show.S01E01.mkv", 100, &[0u8; 100]);
+        compressed.method = 3;
+        let volumes = vec![volume(&[
+            file_block(&compressed),
+            file_block(&store_spec("Show.S01E02.mkv", 50, &[1u8; 50])),
+        ])];
+        let members =
+            list_members(&mut Cursor::new(concat(&volumes)), &layout(&volumes), None).unwrap();
+        assert_eq!(members[0].delivery, DELIVERY_DOWNLOAD);
+        assert_eq!(members[1].delivery, DELIVERY_STREAM);
+    }
+
+    #[test]
+    fn member_selection_maps_requested_entry_instead_of_largest() {
+        let volumes = multi_episode_volumes();
+        let bytes = concat(&volumes);
+        let largest =
+            build_fragment_map(&mut Cursor::new(bytes.clone()), &layout(&volumes), None).unwrap();
+        assert_eq!(largest.filename, "Show/Show.S01E01.mkv");
+
+        let chosen = build_fragment_map_for(
+            &mut Cursor::new(bytes.clone()),
+            &layout(&volumes),
+            None,
+            Some("Show/Show.S01E02.mkv"),
+        )
+        .unwrap();
+        assert_eq!(chosen.filename, "Show/Show.S01E02.mkv");
+        assert_eq!(chosen.total_len, 150);
+        let payload: Vec<u8> = chosen
+            .slices(0..150)
+            .iter()
+            .flat_map(|range| bytes[range.start as usize..range.end as usize].to_vec())
+            .collect();
+        let mut expected = vec![2u8; 100];
+        expected.extend_from_slice(&[3u8; 50]);
+        assert_eq!(payload, expected);
+    }
+
+    #[test]
+    fn member_selection_reports_missing_entry() {
+        let volumes = multi_episode_volumes();
+        let error = build_fragment_map_for(
+            &mut Cursor::new(concat(&volumes)),
+            &layout(&volumes),
+            None,
+            Some("Show/Show.S01E03.mkv"),
+        )
+        .unwrap_err();
+        assert!(matches!(error, RarError::MemberNotFound(name) if name == "Show/Show.S01E03.mkv"));
     }
 
     #[test]

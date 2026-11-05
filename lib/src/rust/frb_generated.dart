@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -101064588;
+  int get rustContentHash => 1529416488;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -105,6 +105,12 @@ abstract class RustLibApi extends BaseApi {
   String crateApiSimpleGreet({required String name});
 
   Future<void> crateApiSimpleInitApp();
+
+  Future<List<PlayableEntryDto>> crateApiStreamingListArchiveEntries({
+    required ProviderConfigDto config,
+    required String nzbPath,
+    required String entryKey,
+  });
 
   Future<List<PlayableEntryDto>> crateApiStreamingListPlayableEntries({
     required String nzbPath,
@@ -378,6 +384,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<List<PlayableEntryDto>> crateApiStreamingListArchiveEntries({
+    required ProviderConfigDto config,
+    required String nzbPath,
+    required String entryKey,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_provider_config_dto(config, serializer);
+          sse_encode_String(nzbPath, serializer);
+          sse_encode_String(entryKey, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_playable_entry_dto,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiStreamingListArchiveEntriesConstMeta,
+        argValues: [config, nzbPath, entryKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiStreamingListArchiveEntriesConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_archive_entries",
+        argNames: ["config", "nzbPath", "entryKey"],
+      );
+
+  @override
   Future<List<PlayableEntryDto>> crateApiStreamingListPlayableEntries({
     required String nzbPath,
   }) {
@@ -389,7 +432,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 10,
             port: port_,
           );
         },
@@ -422,7 +465,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 11,
             port: port_,
           );
         },
@@ -461,7 +504,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 12,
             port: port_,
           );
         },
@@ -500,7 +543,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -533,7 +576,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 14,
             port: port_,
           );
         },
@@ -568,7 +611,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 15,
             port: port_,
           );
         },
@@ -599,7 +642,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 16,
             port: port_,
           );
         },
@@ -757,14 +800,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlayableEntryDto dco_decode_playable_entry_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return PlayableEntryDto(
       key: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
       kind: dco_decode_String(arr[2]),
       encodedBytes: dco_decode_u_64(arr[3]),
       partCount: dco_decode_u_32(arr[4]),
+      delivery: dco_decode_String(arr[5]),
     );
   }
 
@@ -1088,12 +1132,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_kind = sse_decode_String(deserializer);
     var var_encodedBytes = sse_decode_u_64(deserializer);
     var var_partCount = sse_decode_u_32(deserializer);
+    var var_delivery = sse_decode_String(deserializer);
     return PlayableEntryDto(
       key: var_key,
       name: var_name,
       kind: var_kind,
       encodedBytes: var_encodedBytes,
       partCount: var_partCount,
+      delivery: var_delivery,
     );
   }
 
@@ -1441,6 +1487,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.kind, serializer);
     sse_encode_u_64(self.encodedBytes, serializer);
     sse_encode_u_32(self.partCount, serializer);
+    sse_encode_String(self.delivery, serializer);
   }
 
   @protected

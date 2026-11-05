@@ -741,6 +741,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get entryKindArchive => 'Archive';
 
   @override
+  String get entryDeliveryStream =>
+      'Архив без сжатия — видео стримится напрямую, перемотка мгновенная.';
+
+  @override
+  String get entryDeliveryDecode =>
+      'Сжатый архив — распаковывается на лету; поздние серии стартуют дольше, перемотка назад медленнее.';
+
+  @override
+  String get entryDeliveryDownload =>
+      'Сжатый RAR — сначала скачивается весь архив, затем распаковывается серия. Запуск займёт время.';
+
+  @override
+  String get entryDeliveryMixed =>
+      'Часть файлов стримится напрямую, остальные нужно сначала распаковать или скачать.';
+
+  @override
   String entryParts(int count) {
     return '$count parts';
   }

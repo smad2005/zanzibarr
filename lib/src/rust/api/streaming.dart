@@ -6,16 +6,27 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_rar_source`, `build_sevenzip_source`, `cancel_active_stream`, `cancellation_requested`, `ensure_stream_not_cancelled`, `fetch_first_segment`, `fetch_middle_first_segments`, `filename`, `generate_cast_token`, `implied_number`, `install_overlay`, `is_compressed`, `load_stream_selection_blocking`, `load_stream_selection`, `local_lan_ipv4`, `next_session_id`, `open_nzb_file`, `playable_entries`, `prepare_stream_source`, `probe_numbered_set`, `read_nzb_bytes`, `read_nzb`, `run_stream_session`, `segment_count`, `select_stream_by_key`, `select_stream`, `set_key`, `terminate_stream`, `url_encode_path`, `volume_number_permutation`, `wait_for_cancellation`, `wait_for_stream_ready`
+// These functions are ignored because they are not marked as `pub`: `archive_member_entries`, `build_rar_source`, `build_sevenzip_source`, `cancel_active_stream`, `cancellation_requested`, `ensure_stream_not_cancelled`, `fetch_first_segment`, `fetch_middle_first_segments`, `filename`, `generate_cast_token`, `implied_number`, `install_overlay`, `is_compressed`, `load_stream_selection_blocking`, `load_stream_selection`, `local_lan_ipv4`, `natural_name_cmp`, `next_session_id`, `open_nzb_file`, `playable_entries`, `prepare_stream_source`, `probe_numbered_set`, `read_nzb_bytes`, `read_nzb`, `run_stream_session`, `segment_count`, `select_stream_by_key`, `select_stream`, `set_key`, `split_member_key`, `terminate_stream`, `url_encode_path`, `volume_number_permutation`, `wait_for_cancellation`, `wait_for_stream_ready`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ActiveStream`, `StreamSelection`, `StreamSource`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `content_type`, `total_len`, `write_range`
 
-/// NZB'deki oynatılabilir adayları ağa çıkmadan listeler (yalnız dosya okuma
-/// + ayrıştırma). Sezon paketi gibi çok parçalı NZB'lerde Flutter bu listeyle
-/// seçici diyalog gösterir; tek adaylı NZB'lerde diyalogsuz doğrudan başlanır.
+/// NZB'deki oynatılabilir adayları ağa çıkmadan listeler (yalnız dosya
+/// okuma ve ayrıştırma). Sezon paketi gibi çok parçalı NZB'lerde Flutter bu
+/// listeyle seçici diyalog gösterir; tek adaylı NZB'lerde diyalogsuz doğrudan
+/// başlanır.
 Future<List<PlayableEntryDto>> listPlayableEntries({required String nzbPath}) =>
     RustLib.instance.api.crateApiStreamingListPlayableEntries(nzbPath: nzbPath);
+
+Future<List<PlayableEntryDto>> listArchiveEntries({
+  required ProviderConfigDto config,
+  required String nzbPath,
+  required String entryKey,
+}) => RustLib.instance.api.crateApiStreamingListArchiveEntries(
+  config: config,
+  nzbPath: nzbPath,
+  entryKey: entryKey,
+);
 
 /// NZB'yi doğrular, iptal edilebilir bir hazırlama oturumu başlatır ve session
 /// kimliğini hemen döndürür. Ağ/bootstrap sonucu [`await_stream`] ile alınır;
@@ -74,6 +85,7 @@ class PlayableEntryDto {
 
   /// Parça sayısı: doğrudan videoda 1, setlerde cilt sayısı.
   final int partCount;
+  final String delivery;
 
   const PlayableEntryDto({
     required this.key,
@@ -81,6 +93,7 @@ class PlayableEntryDto {
     required this.kind,
     required this.encodedBytes,
     required this.partCount,
+    required this.delivery,
   });
 
   @override
@@ -89,7 +102,8 @@ class PlayableEntryDto {
       name.hashCode ^
       kind.hashCode ^
       encodedBytes.hashCode ^
-      partCount.hashCode;
+      partCount.hashCode ^
+      delivery.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -100,7 +114,8 @@ class PlayableEntryDto {
           name == other.name &&
           kind == other.kind &&
           encodedBytes == other.encodedBytes &&
-          partCount == other.partCount;
+          partCount == other.partCount &&
+          delivery == other.delivery;
 }
 
 /// Dart'tan gelen sağlayıcı yapılandırması.

@@ -189,6 +189,10 @@
   "entryPickerSubtitle": "This NZB contains multiple videos — pick one to start streaming.",
   "entryKindDirect": "Video",
   "entryKindArchive": "Archive",
+  "entryDeliveryStream": "Stored without compression — streams directly, seeking is instant.",
+  "entryDeliveryDecode": "Compressed archive — unpacked while streaming; later episodes take longer to start and seeking back is slower.",
+  "entryDeliveryDownload": "Compressed RAR — the whole archive is downloaded first, then the episode is unpacked. Starting takes a while.",
+  "entryDeliveryMixed": "Some files stream directly, others have to be unpacked or downloaded first.",
   "entryParts": "{count} parts",
   "@entryParts": {
     "placeholders": {

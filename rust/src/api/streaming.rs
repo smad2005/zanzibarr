@@ -17,7 +17,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 
-use crate::engine::archive::{sniff_archive_kind, ArchiveKind};
+use crate::engine::archive::{sniff_archive_kind, ArchiveKind, ArchiveMember};
 use crate::engine::nntp::{NntpPool, ProviderConfig, TlsNntpConnector};
 use crate::engine::nntp_source::{
     read_body_with_timeout, NntpByteSource, BODY_READ_TIMEOUT, DEFAULT_PREFETCH_DEPTH,
@@ -104,6 +104,7 @@ pub struct PlayableEntryDto {
     pub encoded_bytes: u64,
     /// Parça sayısı: doğrudan videoda 1, setlerde cilt sayısı.
     pub part_count: u32,
+    pub delivery: String,
 }
 
 #[cfg(test)]
@@ -271,10 +272,12 @@ enum StreamSelection {
     SevenZip {
         volumes: Vec<NzbFile>,
         password: Option<String>,
+        member: Option<String>,
     },
     Rar {
         volumes: Vec<NzbFile>,
         password: Option<String>,
+        member: Option<String>,
     },
     /// Adından türü anlaşılamayan sayısal ekli obfuske set; gerçek biçim
     /// `prepare_stream_source` içinde ilk cildin içerik imzası koklanarak
@@ -283,6 +286,7 @@ enum StreamSelection {
         base_name: String,
         volumes: Vec<NzbFile>,
         password: Option<String>,
+        member: Option<String>,
     },
 }
 
@@ -311,16 +315,21 @@ async fn prepare_stream_source(
             };
             Ok(StreamSource::Direct(source))
         }
-        StreamSelection::SevenZip { volumes, password } => {
-            build_sevenzip_source(pool, volumes, password, cancellation).await
-        }
-        StreamSelection::Rar { volumes, password } => {
-            build_rar_source(pool, volumes, password, cancellation).await
-        }
+        StreamSelection::SevenZip {
+            volumes,
+            password,
+            member,
+        } => build_sevenzip_source(pool, volumes, password, member, cancellation).await,
+        StreamSelection::Rar {
+            volumes,
+            password,
+            member,
+        } => build_rar_source(pool, volumes, password, member, cancellation).await,
         StreamSelection::Probe {
             base_name,
             volumes,
             password,
+            member,
         } => {
             let (kind, volumes, trace) =
                 probe_numbered_set(&pool, &base_name, volumes, &cancellation).await?;
@@ -329,11 +338,11 @@ async fn prepare_stream_source(
                 // cihaz üzerindeki hata iletisi (ekran görüntüsü) tek canlı
                 // teşhis kanalıdır; iz, sıralamanın hangi aşamayla
                 // kurulduğunu söyler.
-                ArchiveKind::Rar => build_rar_source(pool, volumes, password, cancellation)
+                ArchiveKind::Rar => build_rar_source(pool, volumes, password, member, cancellation)
                     .await
                     .map_err(|error| format!("{error} [{trace}]")),
                 ArchiveKind::SevenZip => {
-                    build_sevenzip_source(pool, volumes, password, cancellation).await
+                    build_sevenzip_source(pool, volumes, password, member, cancellation).await
                 }
             }
         }
@@ -344,10 +353,11 @@ async fn build_sevenzip_source(
     pool: Arc<NntpPool<TlsNntpConnector>>,
     volumes: Vec<NzbFile>,
     password: Option<String>,
+    member: Option<String>,
     cancellation: watch::Receiver<bool>,
 ) -> Result<StreamSource, String> {
     Ok(StreamSource::SevenZip(
-        SevenZipEntrySource::new_cancellable(pool, volumes, password, cancellation)
+        SevenZipEntrySource::new_cancellable(pool, volumes, password, member, cancellation)
             .await
             .map_err(|error| error.to_string())?,
     ))
@@ -357,12 +367,14 @@ async fn build_rar_source(
     pool: Arc<NntpPool<TlsNntpConnector>>,
     volumes: Vec<NzbFile>,
     password: Option<String>,
+    member: Option<String>,
     cancellation: watch::Receiver<bool>,
 ) -> Result<StreamSource, String> {
     match RarEntrySource::new_cancellable(
         pool.clone(),
         volumes.clone(),
         password.clone(),
+        member.clone(),
         cancellation.clone(),
     )
     .await
@@ -372,7 +384,7 @@ async fn build_rar_source(
         // geçici diske kopyalanır, libunrar hedef üyeyi büyüyen çıktı
         // dosyasına çözer, oynatıcı çıktıyı Range ile okur.
         Err(RarError::UnsupportedCompression) => Ok(StreamSource::RarCompressed(
-            CompressedRarEntrySource::new_cancellable(pool, volumes, password, cancellation)
+            CompressedRarEntrySource::new_cancellable(pool, volumes, password, member, cancellation)
                 .await
                 .map_err(|error| error.to_string())?,
         )),
@@ -935,6 +947,7 @@ const ENTRY_KEY_DIRECT: &str = "direct:";
 const ENTRY_KEY_7Z: &str = "7z:";
 const ENTRY_KEY_RAR: &str = "rar:";
 const ENTRY_KEY_PROBE: &str = "probe:";
+const ENTRY_MEMBER_SEPARATOR: char = '|';
 
 /// Set anahtarları taban adın küçük harf haliyle üretilir: gruplama da aynı
 /// normalizasyonu kullandığı için seçimde bire bir bulunurlar.
@@ -968,6 +981,7 @@ fn playable_entries(parsed: &nzb::Nzb) -> Vec<PlayableEntryDto> {
             kind: "direct".into(),
             encoded_bytes: file.encoded_bytes(),
             part_count: 1,
+            delivery: String::new(),
         });
     }
 
@@ -987,6 +1001,7 @@ fn playable_entries(parsed: &nzb::Nzb) -> Vec<PlayableEntryDto> {
                 kind: "7z".into(),
                 encoded_bytes,
                 part_count: set.volumes.len().min(u32::MAX as usize) as u32,
+                delivery: String::new(),
             });
         }
     }
@@ -1002,6 +1017,7 @@ fn playable_entries(parsed: &nzb::Nzb) -> Vec<PlayableEntryDto> {
                 kind: "rar".into(),
                 encoded_bytes,
                 part_count: set.volumes.len().min(u32::MAX as usize) as u32,
+                delivery: String::new(),
             });
         }
     }
@@ -1023,6 +1039,7 @@ fn playable_entries(parsed: &nzb::Nzb) -> Vec<PlayableEntryDto> {
             kind: "probe".into(),
             encoded_bytes,
             part_count: set.volumes.len().min(u32::MAX as usize) as u32,
+            delivery: String::new(),
         });
     }
 
@@ -1102,7 +1119,8 @@ fn select_stream_by_key(parsed: &nzb::Nzb, key: &str) -> Result<StreamSelection,
             .map_err(|error| error.to_string())?;
         return Ok(StreamSelection::Direct(file.clone()));
     }
-    if let Some(base) = key.strip_prefix(ENTRY_KEY_7Z) {
+    if let Some(rest) = key.strip_prefix(ENTRY_KEY_7Z) {
+        let (base, member) = split_member_key(rest);
         let sets = parsed.split_7z_sets().map_err(|error| error.to_string())?;
         let set = sets
             .into_iter()
@@ -1115,9 +1133,11 @@ fn select_stream_by_key(parsed: &nzb::Nzb, key: &str) -> Result<StreamSelection,
                 .map(|volume| volume.file.clone())
                 .collect(),
             password: parsed.meta_value("password").map(str::to_owned),
+            member,
         });
     }
-    if let Some(base) = key.strip_prefix(ENTRY_KEY_RAR) {
+    if let Some(rest) = key.strip_prefix(ENTRY_KEY_RAR) {
+        let (base, member) = split_member_key(rest);
         let sets = parsed.split_rar_sets().map_err(|error| error.to_string())?;
         let set = sets
             .into_iter()
@@ -1130,9 +1150,11 @@ fn select_stream_by_key(parsed: &nzb::Nzb, key: &str) -> Result<StreamSelection,
                 .map(|volume| volume.file.clone())
                 .collect(),
             password: parsed.meta_value("password").map(str::to_owned),
+            member,
         });
     }
-    if let Some(base) = key.strip_prefix(ENTRY_KEY_PROBE) {
+    if let Some(rest) = key.strip_prefix(ENTRY_KEY_PROBE) {
+        let (base, member) = split_member_key(rest);
         let set = parsed
             .numbered_volume_sets()
             .into_iter()
@@ -1146,9 +1168,38 @@ fn select_stream_by_key(parsed: &nzb::Nzb, key: &str) -> Result<StreamSelection,
                 .map(|volume| volume.file.clone())
                 .collect(),
             password: parsed.meta_value("password").map(str::to_owned),
+            member,
         });
     }
     Err(format!("unknown entry selector: {key}"))
+}
+
+fn split_member_key(rest: &str) -> (&str, Option<String>) {
+    match rest.split_once(ENTRY_MEMBER_SEPARATOR) {
+        Some((base, member)) if !member.is_empty() => (base, Some(member.to_string())),
+        Some((base, _)) => (base, None),
+        None => (rest, None),
+    }
+}
+
+fn archive_member_entries(
+    set_key: &str,
+    kind: &str,
+    members: Vec<ArchiveMember>,
+) -> Vec<PlayableEntryDto> {
+    let mut entries: Vec<PlayableEntryDto> = members
+        .into_iter()
+        .map(|member| PlayableEntryDto {
+            key: format!("{set_key}{ENTRY_MEMBER_SEPARATOR}{}", member.name),
+            name: nzb::basename(&member.name).to_string(),
+            kind: kind.into(),
+            encoded_bytes: member.unpacked_size,
+            part_count: member.part_count.min(u32::MAX as usize) as u32,
+            delivery: member.delivery.into(),
+        })
+        .collect();
+    entries.sort_by(|a, b| natural_name_cmp(&a.name, &b.name));
+    entries
 }
 
 fn select_stream(parsed: &nzb::Nzb) -> Result<StreamSelection, String> {
@@ -1170,6 +1221,7 @@ fn select_stream(parsed: &nzb::Nzb) -> Result<StreamSelection, String> {
                         .map(|volume| volume.file.clone())
                         .collect(),
                     password: parsed.meta_value("password").map(str::to_owned),
+                    member: None,
                 });
             }
 
@@ -1186,6 +1238,7 @@ fn select_stream(parsed: &nzb::Nzb) -> Result<StreamSelection, String> {
                         .map(|volume| volume.file.clone())
                         .collect(),
                     password: parsed.meta_value("password").map(str::to_owned),
+                    member: None,
                 });
             }
 
@@ -1212,6 +1265,7 @@ fn select_stream(parsed: &nzb::Nzb) -> Result<StreamSelection, String> {
                     .map(|volume| volume.file.clone())
                     .collect(),
                 password: parsed.meta_value("password").map(str::to_owned),
+                member: None,
             })
         }
         Err(error) => Err(error.to_string()),
@@ -1227,6 +1281,75 @@ pub async fn list_playable_entries(nzb_path: String) -> Result<Vec<PlayableEntry
         .spawn_blocking(move || read_nzb(&nzb_path).map(|parsed| playable_entries(&parsed)))
         .await
         .map_err(|error| format!("NZB listing task failed to complete: {error}"))?
+}
+
+pub async fn list_archive_entries(
+    config: ProviderConfigDto,
+    nzb_path: String,
+    entry_key: String,
+) -> Result<Vec<PlayableEntryDto>, String> {
+    let selection_key = entry_key.clone();
+    let selection = RUNTIME
+        .spawn_blocking(move || {
+            read_nzb(&nzb_path).and_then(|parsed| select_stream_by_key(&parsed, &selection_key))
+        })
+        .await
+        .map_err(|error| format!("NZB listing task failed to complete: {error}"))??;
+    let (known_kind, probe_base, volumes, password) = match selection {
+        StreamSelection::Rar {
+            volumes,
+            password,
+            member: None,
+        } => (Some(ArchiveKind::Rar), None, volumes, password),
+        StreamSelection::SevenZip {
+            volumes,
+            password,
+            member: None,
+        } => (Some(ArchiveKind::SevenZip), None, volumes, password),
+        StreamSelection::Probe {
+            base_name,
+            volumes,
+            password,
+            member: None,
+        } => (None, Some(base_name), volumes, password),
+        _ => return Ok(Vec::new()),
+    };
+    RUNTIME
+        .spawn(async move {
+            let pool = TlsNntpConnector::new(config.into()).into_pool();
+            let (_cancellation_guard, cancellation) = watch::channel(false);
+            let (kind, volumes) = match (known_kind, probe_base) {
+                (Some(kind), _) => (kind, volumes),
+                (None, Some(base_name)) => {
+                    let (kind, volumes, _) =
+                        probe_numbered_set(&pool, &base_name, volumes, &cancellation).await?;
+                    (kind, volumes)
+                }
+                (None, None) => return Ok(Vec::new()),
+            };
+            let (label, members) = match kind {
+                ArchiveKind::Rar => (
+                    "rar",
+                    rar::list_playable_members(pool, volumes, password, cancellation)
+                        .await
+                        .map_err(|error| error.to_string())?,
+                ),
+                ArchiveKind::SevenZip => (
+                    "7z",
+                    crate::engine::sevenzip::list_playable_members(
+                        pool,
+                        volumes,
+                        password,
+                        cancellation,
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?,
+                ),
+            };
+            Ok(archive_member_entries(&entry_key, label, members))
+        })
+        .await
+        .map_err(|error| format!("archive listing task failed to complete: {error}"))?
 }
 
 /// NZB'yi doğrular, iptal edilebilir bir hazırlama oturumu başlatır ve session
@@ -1526,7 +1649,7 @@ mod tests {
             ],
         };
         let selection = select_stream(&parsed).unwrap();
-        let StreamSelection::SevenZip { volumes, password } = selection else {
+        let StreamSelection::SevenZip { volumes, password, .. } = selection else {
             panic!("expected 7z selection");
         };
         assert_eq!(volumes[0].filename(), Some("archive.7z.001"));
@@ -1562,7 +1685,7 @@ mod tests {
             ],
         };
         let selection = select_stream(&parsed).unwrap();
-        let StreamSelection::Rar { volumes, password } = selection else {
+        let StreamSelection::Rar { volumes, password, .. } = selection else {
             panic!("expected RAR selection");
         };
         assert_eq!(volumes[0].filename(), Some("movie.part01.rar"));
@@ -1581,7 +1704,7 @@ mod tests {
                 file("\"large.part02.rar\" yEnc (1/1)", 1, 9000),
             ],
         };
-        let StreamSelection::Rar { volumes, password } = select_stream(&parsed).unwrap() else {
+        let StreamSelection::Rar { volumes, password, .. } = select_stream(&parsed).unwrap() else {
             panic!("expected RAR selection");
         };
         assert_eq!(volumes.len(), 2);
@@ -1619,6 +1742,7 @@ mod tests {
             base_name,
             volumes,
             password,
+            ..
         } = selection
         else {
             panic!("expected Probe selection");
@@ -1853,5 +1977,93 @@ mod tests {
             panic!("expected Rar selection");
         };
         assert_eq!(volumes[0].filename(), Some("show.s01e01.part01.rar"));
+    }
+
+    #[test]
+    fn keyed_selection_carries_archive_member() {
+        let parsed = nzb::Nzb {
+            meta: vec![],
+            files: vec![
+                file("poster \"pack.part01.rar\" yEnc (1/5)", 5, 100),
+                file("poster \"pack.part02.rar\" yEnc (1/5)", 5, 100),
+                file("poster \"33dce3.10\" yEnc (1/5)", 5, 40),
+                file("poster \"33dce3.11\" yEnc (1/5)", 5, 40),
+            ],
+        };
+
+        let selection = select_stream_by_key(&parsed, "rar:pack|Show/Show.S01E02.mkv").unwrap();
+        let StreamSelection::Rar { volumes, member, .. } = selection else {
+            panic!("expected Rar selection");
+        };
+        assert_eq!(volumes.len(), 2);
+        assert_eq!(member.as_deref(), Some("Show/Show.S01E02.mkv"));
+
+        let StreamSelection::Rar { member, .. } = select_stream_by_key(&parsed, "rar:pack").unwrap()
+        else {
+            panic!("expected Rar selection");
+        };
+        assert_eq!(member, None);
+
+        let StreamSelection::Probe { member, .. } =
+            select_stream_by_key(&parsed, "probe:33dce3|E01.mkv").unwrap()
+        else {
+            panic!("expected Probe selection");
+        };
+        assert_eq!(member.as_deref(), Some("E01.mkv"));
+    }
+
+    #[test]
+    fn keyed_7z_selection_carries_archive_member() {
+        let parsed = nzb::Nzb {
+            meta: vec![],
+            files: vec![
+                file("poster \"show.7z.001\" yEnc (1/5)", 5, 100),
+                file("poster \"show.7z.002\" yEnc (1/5)", 5, 100),
+            ],
+        };
+        let StreamSelection::SevenZip { volumes, member, .. } =
+            select_stream_by_key(&parsed, "7z:show.7z|Show.S01E03.mkv").unwrap()
+        else {
+            panic!("expected SevenZip selection");
+        };
+        assert_eq!(volumes.len(), 2);
+        assert_eq!(member.as_deref(), Some("Show.S01E03.mkv"));
+    }
+
+    #[test]
+    fn member_key_split_handles_missing_and_empty_member() {
+        assert_eq!(split_member_key("pack"), ("pack", None));
+        assert_eq!(split_member_key("pack|"), ("pack", None));
+        assert_eq!(
+            split_member_key("pack|dir/E01.mkv"),
+            ("pack", Some("dir/E01.mkv".to_string()))
+        );
+    }
+
+    #[test]
+    fn archive_member_entries_use_basenames_and_natural_order() {
+        let members = vec![
+            ArchiveMember {
+                name: "Show/Show.S01E10.mkv".into(),
+                unpacked_size: 500,
+                part_count: 3,
+                delivery: "download",
+            },
+            ArchiveMember {
+                name: "Show/Show.S01E9.mkv".into(),
+                unpacked_size: 400,
+                part_count: 2,
+                delivery: "download",
+            },
+        ];
+        let entries = archive_member_entries("rar:pack", "rar", members);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].name, "Show.S01E9.mkv");
+        assert_eq!(entries[0].key, "rar:pack|Show/Show.S01E9.mkv");
+        assert_eq!(entries[0].kind, "rar");
+        assert_eq!(entries[0].encoded_bytes, 400);
+        assert_eq!(entries[0].part_count, 2);
+        assert_eq!(entries[0].delivery, "download");
+        assert_eq!(entries[1].key, "rar:pack|Show/Show.S01E10.mkv");
     }
 }

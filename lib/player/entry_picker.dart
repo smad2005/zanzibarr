@@ -47,9 +47,25 @@ class _PlayableEntryPickerDialog extends StatelessWidget {
     return '<1 MB';
   }
 
+  static String? _deliveryNote(
+    AppLocalizations l10n,
+    List<PlayableEntryDto> entries,
+  ) {
+    final deliveries = entries.map((entry) => entry.delivery).toSet();
+    if (deliveries.isEmpty || deliveries.contains('')) return null;
+    if (deliveries.length > 1) return l10n.entryDeliveryMixed;
+    return switch (deliveries.single) {
+      'stream' => l10n.entryDeliveryStream,
+      'decode' => l10n.entryDeliveryDecode,
+      'download' => l10n.entryDeliveryDownload,
+      _ => null,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final deliveryNote = _deliveryNote(l10n, entries);
     return AlertDialog(
       title: Text(l10n.entryPickerTitle),
       content: SizedBox(
@@ -66,6 +82,16 @@ class _PlayableEntryPickerDialog extends StatelessWidget {
                 ).colorScheme.onSurface.withValues(alpha: 0.55),
               ),
             ),
+            if (deliveryNote != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                deliveryNote,
+                key: const ValueKey('entry-picker-delivery-note'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             Flexible(
               child: ListView.builder(

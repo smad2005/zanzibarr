@@ -26,6 +26,18 @@ pub(crate) const BLOCKING_READER_MAX_CHUNK: usize = 1024 * 1024;
 
 /// İçerik imzasından tanınan arşiv biçimi. Adı çözülemeyen (obfuske) cilt
 /// setlerinde gerçek biçim, ilk cildin çözülmüş ilk baytlarından belirlenir.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ArchiveMember {
+    pub(crate) name: String,
+    pub(crate) unpacked_size: u64,
+    pub(crate) part_count: usize,
+    pub(crate) delivery: &'static str,
+}
+
+pub(crate) const DELIVERY_STREAM: &str = "stream";
+pub(crate) const DELIVERY_DECODE: &str = "decode";
+pub(crate) const DELIVERY_DOWNLOAD: &str = "download";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ArchiveKind {
     Rar,

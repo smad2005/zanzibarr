@@ -1394,6 +1394,30 @@ abstract class AppLocalizations {
   /// **'Archive'**
   String get entryKindArchive;
 
+  /// No description provided for @entryDeliveryStream.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored without compression — streams directly, seeking is instant.'**
+  String get entryDeliveryStream;
+
+  /// No description provided for @entryDeliveryDecode.
+  ///
+  /// In en, this message translates to:
+  /// **'Compressed archive — unpacked while streaming; later episodes take longer to start and seeking back is slower.'**
+  String get entryDeliveryDecode;
+
+  /// No description provided for @entryDeliveryDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Compressed RAR — the whole archive is downloaded first, then the episode is unpacked. Starting takes a while.'**
+  String get entryDeliveryDownload;
+
+  /// No description provided for @entryDeliveryMixed.
+  ///
+  /// In en, this message translates to:
+  /// **'Some files stream directly, others have to be unpacked or downloaded first.'**
+  String get entryDeliveryMixed;
+
   /// No description provided for @entryParts.
   ///
   /// In en, this message translates to:

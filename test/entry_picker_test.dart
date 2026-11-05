@@ -17,12 +17,14 @@ PlayableEntryDto _entry({
   String kind = 'direct',
   int megaBytes = 2048,
   int partCount = 1,
+  String delivery = '',
 }) => PlayableEntryDto(
   key: key,
   name: name,
   kind: kind,
   encodedBytes: BigInt.from(megaBytes * 1024 * 1024),
   partCount: partCount,
+  delivery: delivery,
 );
 
 /// Diyalogu Türkçe arayüzle açar; sonucu [onDone] ile bildirir.
@@ -112,6 +114,70 @@ void main() {
       await tester.pumpAndSettle();
       expect(completed, isTrue);
       expect(result, isNull);
+    });
+
+    testWidgets('shows no delivery note for NZB-level entries', (tester) async {
+      await _openPicker(tester, [
+        _entry(key: 'direct:show.e01.mkv', name: 'show.e01.mkv'),
+        _entry(key: 'rar:show.e02', name: 'show.e02', kind: 'rar'),
+      ], (_) {});
+
+      expect(
+        find.byKey(const ValueKey('entry-picker-delivery-note')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('shows download note for compressed RAR members', (
+      tester,
+    ) async {
+      await _openPicker(tester, [
+        _entry(
+          key: 'rar:pack|E01.mkv',
+          name: 'E01.mkv',
+          kind: 'rar',
+          delivery: 'download',
+        ),
+        _entry(
+          key: 'rar:pack|E02.mkv',
+          name: 'E02.mkv',
+          kind: 'rar',
+          delivery: 'download',
+        ),
+      ], (_) {});
+
+      expect(
+        find.text(
+          'Sıkıştırılmış RAR — önce arşivin tamamı indirilir, ardından bölüm '
+          'açılır. Başlaması zaman alır.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows mixed note when members differ', (tester) async {
+      await _openPicker(tester, [
+        _entry(
+          key: 'rar:pack|E01.mkv',
+          name: 'E01.mkv',
+          kind: 'rar',
+          delivery: 'stream',
+        ),
+        _entry(
+          key: 'rar:pack|E02.mkv',
+          name: 'E02.mkv',
+          kind: 'rar',
+          delivery: 'download',
+        ),
+      ], (_) {});
+
+      expect(
+        find.text(
+          'Bazı dosyalar doğrudan akar, diğerlerinin önce açılması veya '
+          'indirilmesi gerekir.',
+        ),
+        findsOneWidget,
+      );
     });
   });
 }

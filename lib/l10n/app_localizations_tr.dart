@@ -737,6 +737,22 @@ class AppLocalizationsTr extends AppLocalizations {
   String get entryKindArchive => 'Arşiv';
 
   @override
+  String get entryDeliveryStream =>
+      'Sıkıştırmasız arşiv — doğrudan akış, ileri/geri sarma anında.';
+
+  @override
+  String get entryDeliveryDecode =>
+      'Sıkıştırılmış arşiv — oynatılırken açılır; sonraki bölümlerin başlaması ve geri sarma daha yavaş.';
+
+  @override
+  String get entryDeliveryDownload =>
+      'Sıkıştırılmış RAR — önce arşivin tamamı indirilir, ardından bölüm açılır. Başlaması zaman alır.';
+
+  @override
+  String get entryDeliveryMixed =>
+      'Bazı dosyalar doğrudan akar, diğerlerinin önce açılması veya indirilmesi gerekir.';
+
+  @override
   String entryParts(int count) {
     return '$count parça';
   }

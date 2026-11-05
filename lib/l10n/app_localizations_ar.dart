@@ -737,6 +737,22 @@ class AppLocalizationsAr extends AppLocalizations {
   String get entryKindArchive => 'Archive';
 
   @override
+  String get entryDeliveryStream =>
+      'Stored without compression — streams directly, seeking is instant.';
+
+  @override
+  String get entryDeliveryDecode =>
+      'Compressed archive — unpacked while streaming; later episodes take longer to start and seeking back is slower.';
+
+  @override
+  String get entryDeliveryDownload =>
+      'Compressed RAR — the whole archive is downloaded first, then the episode is unpacked. Starting takes a while.';
+
+  @override
+  String get entryDeliveryMixed =>
+      'Some files stream directly, others have to be unpacked or downloaded first.';
+
+  @override
   String entryParts(int count) {
     return '$count parts';
   }

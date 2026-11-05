@@ -422,6 +422,41 @@ class _PlayerScreenState extends State<PlayerScreen>
               return;
             }
           }
+          final archiveKey =
+              entryKey ?? (entries.length == 1 ? entries.single.key : null);
+          if (archiveKey != null &&
+              (archiveKey.startsWith('rar:') ||
+                  archiveKey.startsWith('7z:') ||
+                  archiveKey.startsWith('probe:'))) {
+            setState(
+              () => _status = AppLocalizations.of(context).statusConnecting,
+            );
+            final members = await listArchiveEntries(
+              config: ProviderConfigDto(
+                host: settings.host,
+                port: settings.port,
+                username: settings.username,
+                password: settings.password,
+                maxConnections: settings.maxConnections,
+              ),
+              nzbPath: widget.nzbPath,
+              entryKey: archiveKey,
+            ).timeout(widget.streamPreparationTimeout);
+            if (!mounted) return;
+            if (members.length > 1) {
+              final memberKey = await showPlayableEntryPicker(
+                context,
+                members,
+              );
+              if (memberKey == null) {
+                if (mounted && Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
+                return;
+              }
+              entryKey = memberKey;
+            }
+          }
         } catch (_) {
           // Listeleme başarısızsa (bozuk NZB) anahtarsız yola düşülür:
           // beginStream'in kendi ayrıntılı hatası mevcut hata yüzeyine gelir.

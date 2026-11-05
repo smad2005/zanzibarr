@@ -84,10 +84,11 @@ impl CompressedRarEntrySource {
         pool: Arc<NntpPool<TlsNntpConnector>>,
         files: Vec<NzbFile>,
         password: Option<String>,
+        member: Option<String>,
         cancellation: watch::Receiver<bool>,
     ) -> Result<Self, CompressedRarError> {
         let Some((plan, archive)) =
-            probe_compressed_plan(pool, files, password.clone(), cancellation.clone()).await?
+            probe_compressed_plan(pool, files, password.clone(), member, cancellation.clone()).await?
         else {
             // STORE set: çağıran normal RAR yolunu kullanmalı.
             return Err(CompressedRarError::Rar(
