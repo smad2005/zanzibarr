@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -422,12 +423,44 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.updateService ?? UpdateService();
   List<PlaybackHistoryEntry> _history = const [];
 
+  static const _openFileChannel = MethodChannel('com.zanzibarr/open_file');
+
   @override
   void initState() {
     super.initState();
     _loadHistory();
+    if (Platform.isAndroid) unawaited(_listenForOpenedFiles());
     // Açılışta yeni sürüm kontrolü; bulunursa diyalog gösterilir.
     unawaited(_checkForUpdate());
+  }
+
+  @override
+  void dispose() {
+    if (Platform.isAndroid) _openFileChannel.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  Future<void> _listenForOpenedFiles() async {
+    _openFileChannel.setMethodCallHandler((call) async {
+      if (call.method == 'openFile' && call.arguments is String) {
+        await _openIncomingFile(call.arguments as String);
+      }
+    });
+    String? path;
+    try {
+      path = await _openFileChannel.invokeMethod<String>('getInitialFile');
+    } on PlatformException catch (_) {
+      return;
+    } on MissingPluginException catch (_) {
+      return;
+    }
+    if (path != null) await _openIncomingFile(path);
+  }
+
+  Future<void> _openIncomingFile(String path) async {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    await _openPath(path);
   }
 
   Future<void> _checkForUpdate() async {

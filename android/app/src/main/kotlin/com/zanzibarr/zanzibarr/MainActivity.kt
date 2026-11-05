@@ -4,7 +4,9 @@ import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import android.util.Rational
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
@@ -16,9 +18,33 @@ import java.io.File
 
 class MainActivity : FlutterActivity() {
     private var windowChannel: MethodChannel? = null
+    private var openFileChannel: MethodChannel? = null
+    private var pendingOpenUri: Uri? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        pendingOpenUri = if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) {
+            null
+        } else {
+            nzbUriFrom(intent)
+        }
+        openFileChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.zanzibarr/open_file")
+            .also { channel ->
+                channel.setMethodCallHandler { call, result ->
+                    when (call.method) {
+                        "getInitialFile" -> {
+                            val uri = pendingOpenUri
+                            pendingOpenUri = null
+                            if (uri == null) {
+                                result.success(null)
+                            } else {
+                                copyToCache(uri) { path -> result.success(path) }
+                            }
+                        }
+                        else -> result.notImplemented()
+                    }
+                }
+            }
         windowChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.zanzibarr/window")
             .also { channel ->
                 channel.setMethodCallHandler { call, result ->
@@ -65,6 +91,71 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val uri = nzbUriFrom(intent) ?: return
+        setIntent(intent)
+        val channel = openFileChannel
+        if (channel == null) {
+            pendingOpenUri = uri
+            return
+        }
+        copyToCache(uri) { path ->
+            if (path != null) channel.invokeMethod("openFile", path)
+        }
+    }
+
+    private fun nzbUriFrom(intent: Intent?): Uri? {
+        if (intent == null) return null
+        return when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+            else -> null
+        }
+    }
+
+    private fun copyToCache(uri: Uri, onDone: (String?) -> Unit) {
+        Thread {
+            val path = try {
+                val dir = File(cacheDir, "opened_nzb").apply { mkdirs() }
+                val target = File(dir, nzbFileName(uri))
+                val input = contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("cannot open $uri")
+                input.use { source ->
+                    target.outputStream().use { sink -> source.copyTo(sink) }
+                }
+                target.absolutePath
+            } catch (e: Exception) {
+                null
+            }
+            runOnUiThread { onDone(path) }
+        }.start()
+    }
+
+    private fun nzbFileName(uri: Uri): String {
+        var name: String? = null
+        if (uri.scheme == "content") {
+            try {
+                contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { cursor ->
+                        if (cursor.moveToFirst() && !cursor.isNull(0)) name = cursor.getString(0)
+                    }
+            } catch (e: Exception) {
+                name = null
+            }
+        }
+        if (name.isNullOrBlank()) name = uri.lastPathSegment?.substringAfterLast('/')
+        var safe = (name ?: "").replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]"), "_").trim()
+        if (safe.isEmpty() || safe.startsWith(".")) safe = "opened$safe"
+        if (!safe.lowercase().endsWith(".nzb")) safe += ".nzb"
+        return safe
     }
 
     private fun enterPictureInPicture(width: Int?, height: Int?): Boolean {
