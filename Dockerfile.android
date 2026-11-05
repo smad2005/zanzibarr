@@ -35,7 +35,10 @@ FROM base AS rust
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal --default-toolchain stable && \
-    rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+    rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android && \
+    cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked && \
+    cargo install cargo-expand --locked && \
+    rm -rf /root/.cargo/registry /root/.cargo/git
 
 FROM base AS flutter
 
@@ -53,6 +56,6 @@ RUN flutter config --no-analytics && flutter --version
 
 RUN apt-get update && apt-get install -y --no-install-recommends g++ && \
     rm -rf /var/lib/apt/lists/* && \
-    rustup component add clippy
+    rustup component add clippy rustfmt
 
 WORKDIR /app

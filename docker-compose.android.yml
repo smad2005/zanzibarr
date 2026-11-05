@@ -58,6 +58,15 @@ services:
         flutter test
       "
 
+  codegen:
+    <<: *test
+    command: >
+      sh -c "
+        set -e;
+        flutter pub get;
+        flutter_rust_bridge_codegen generate
+      "
+
   test-rust:
     <<: *test
     working_dir: /app/rust
