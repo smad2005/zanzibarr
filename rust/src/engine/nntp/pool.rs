@@ -438,11 +438,13 @@ mod tests {
             4,
         );
         let mut tasks = Vec::new();
+        let barrier = Arc::new(tokio::sync::Barrier::new(4));
         for _ in 0..4 {
             let pool = Arc::clone(&pool);
+            let barrier = Arc::clone(&barrier);
             tasks.push(tokio::spawn(async move {
                 let mut conn = pool.checkout().await.unwrap();
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                barrier.wait().await;
                 conn.mark_reusable();
                 drop(conn);
             }));
