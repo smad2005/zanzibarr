@@ -63,6 +63,8 @@ class GyuniPlayerChrome extends StatelessWidget {
     this.onLoadExternalAudio,
     this.onLoadExternalSubtitle,
     this.playButtonFocusNode,
+    this.onEpisodeSwitch,
+    this.hasMultipleEpisodes = false,
   });
 
   final bool visible;
@@ -137,6 +139,8 @@ class GyuniPlayerChrome extends StatelessWidget {
   /// oynat/duraklat düğmesinin düğümü; null bırakılırsa odak yönetimi
   /// yapılmaz (masaüstü/test).
   final FocusNode? playButtonFocusNode;
+  final VoidCallback? onEpisodeSwitch;
+  final bool hasMultipleEpisodes;
 
   void _handleVideoDoubleTap(BuildContext context, Offset? position) {
     final size = context.size;
@@ -261,6 +265,8 @@ class GyuniPlayerChrome extends StatelessWidget {
                           onLoadExternalAudio: onLoadExternalAudio,
                           onLoadExternalSubtitle: onLoadExternalSubtitle,
                           onShowAdvancedSettings: onShowAdvancedSettings,
+                          onEpisodeSwitch: onEpisodeSwitch,
+                          hasMultipleEpisodes: hasMultipleEpisodes,
                         ),
                       ],
                     ),
@@ -613,6 +619,8 @@ class _BottomControls extends StatelessWidget {
     this.onLoadExternalAudio,
     this.onLoadExternalSubtitle,
     this.playButtonFocusNode,
+    this.onEpisodeSwitch,
+    this.hasMultipleEpisodes = false,
   });
 
   final bool ready;
@@ -643,6 +651,8 @@ class _BottomControls extends StatelessWidget {
   final VoidCallback? onLoadExternalAudio;
   final VoidCallback? onLoadExternalSubtitle;
   final FocusNode? playButtonFocusNode;
+  final VoidCallback? onEpisodeSwitch;
+  final bool hasMultipleEpisodes;
 
   @override
   Widget build(BuildContext context) {
@@ -726,7 +736,7 @@ class _BottomControls extends StatelessWidget {
                 const SizedBox(height: 2),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final showAudio = constraints.maxWidth >= 430;
+                    final whenLandscape = constraints.maxWidth >= 430;
                     final showFrameControls = constraints.maxWidth >= 680;
                     return Row(
                       children: [
@@ -822,7 +832,13 @@ class _BottomControls extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (showAudio) ...[
+                        if (whenLandscape) ...[
+                          if (hasMultipleEpisodes && onEpisodeSwitch != null)
+                            _CompactIconButton(
+                              icon: Icons.playlist_play_rounded,
+                              tooltip: l10n.episodeSwitch,
+                              onPressed: onEpisodeSwitch,
+                            ),
                           _VolumeControl(
                             volume: volume,
                             onToggleMute: onToggleMute,

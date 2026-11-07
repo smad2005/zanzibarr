@@ -721,6 +721,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get episodeSwitch => 'Bölüm değiştir';
+
+  @override
   String get subtitleFont => 'Altyazı yazı tipi';
 
   @override

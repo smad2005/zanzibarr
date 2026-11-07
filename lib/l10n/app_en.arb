@@ -345,6 +345,7 @@
       "error": { "type": "String" }
     }
   },
+  "episodeSwitch": "Switch episode",
   "subtitleFont": "Subtitle font",
   "entryPickerTitle": "Choose what to play",
   "entryPickerSubtitle": "This NZB contains multiple videos — pick one to start streaming.",

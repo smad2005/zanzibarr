@@ -1364,6 +1364,12 @@ abstract class AppLocalizations {
   /// **'Casting failed: {error}'**
   String castFailed(String error);
 
+  /// No description provided for @episodeSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch episode'**
+  String get episodeSwitch;
+
   /// No description provided for @subtitleFont.
   ///
   /// In en, this message translates to:

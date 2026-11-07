@@ -700,6 +700,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get episodeSwitch => 'Switch episode';
+
+  @override
   String get subtitleFont => 'Subtitle font';
 
   @override

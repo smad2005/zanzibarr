@@ -18,6 +18,8 @@ Widget _buildChrome({
   VoidCallback? onLoadExternalAudio,
   VoidCallback? onLoadExternalSubtitle,
   ValueChanged<Offset>? onShowAdvancedSettings,
+  bool hasMultipleEpisodes = false,
+  VoidCallback? onEpisodeSwitch,
 }) {
   return l10nTestApp(
     Scaffold(
@@ -64,6 +66,8 @@ Widget _buildChrome({
           onToggleMute: onToggleMute ?? () {},
           onLoadExternalAudio: onLoadExternalAudio,
           onLoadExternalSubtitle: onLoadExternalSubtitle,
+          hasMultipleEpisodes: hasMultipleEpisodes,
+          onEpisodeSwitch: onEpisodeSwitch,
         ),
       ),
     ),

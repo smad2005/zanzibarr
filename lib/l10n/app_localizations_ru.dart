@@ -725,6 +725,9 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get episodeSwitch => 'Сменить серию';
+
+  @override
   String get subtitleFont => 'Subtitle font';
 
   @override

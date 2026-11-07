@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_kit/media_kit.dart';
 
 import 'package:zanzibarr/player/media_preferences.dart';
 import 'package:zanzibarr/player/playback_history.dart';
 import 'package:zanzibarr/player/player_keyboard_controls.dart';
-import 'package:zanzibarr/player/picture_in_picture_window.dart';
-import 'package:zanzibarr/cast/cast_service.dart';
 import 'package:zanzibarr/l10n/app_localizations.dart';
-import 'package:zanzibarr/settings/provider_settings.dart';
 
 class _MemoryPreferenceStorage implements PlayerPreferenceStorage {
   final Map<String, String> values = <String, String>{};
@@ -26,30 +22,6 @@ class _MemoryPreferenceStorage implements PlayerPreferenceStorage {
   Future<void> delete(String key) async {
     values.remove(key);
   }
-}
-
-class _FakeProviderSettingsStore extends Fake implements ProviderSettingsStore {
-  @override
-  Future<ProviderSettings> load() async => ProviderSettings(
-    host: 'test',
-    port: 119,
-    username: 'test',
-    password: 'test',
-    maxConnections: 1,
-  );
-}
-
-class _FakePictureInPictureWindow extends Fake implements PictureInPictureWindow {
-  @override
-  Stream<PictureInPictureChange> get changes => const Stream.empty();
-  
-  @override
-  bool get isSupported => false;
-}
-
-class _FakeCastController extends Fake implements CastController {
-  @override
-  Future<void> dispose() async {}
 }
 
 class _FakeHandler implements PlayerKeyboardHandler {

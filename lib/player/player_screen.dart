@@ -260,16 +260,21 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _historySaveTimer;
   bool _historyResumeDone = false;
 
-  // Çok parçalı NZB'de oynatılan adayın seçici anahtarı: kullanıcı diyalogda
-  // seçti ya da geçmişten `initialEntryKey` ile geldi. Tek adaylı NZB'lerde
-  // null kalır. Geçmiş kayıtları (nzbPath, entryKey) çiftiyle tutulur ki
-  // sezon paketinin bölümleri birbirinin konumunu ezmesin (issue #5).
   String? _resolvedEntryKey;
-  // Android çok-sesli sessiz açılış düzeltmesi tek seferlik uygulanır.
-  bool _audioReasserted = false;
-  // Video sığdırma kipi: false=contain (oran korunur), true=cover (doldur).
+  List<PlayableEntryDto>? _playableEntries;
+  List<PlayableEntryDto>? _archiveMembers;
   bool _videoFill = false;
   Orientation? _lastOrientation;
+  bool _audioReasserted = false;
+
+  bool get _hasMultipleEpisodes =>
+      (_playableEntries?.length ?? 0) > 1 || (_archiveMembers?.length ?? 0) > 1;
+
+  static bool _isArchiveKey(String? key) =>
+      key != null &&
+      (key.startsWith('rar:') ||
+          key.startsWith('7z:') ||
+          key.startsWith('probe:'));
 
   @override
   void initState() {
@@ -408,59 +413,62 @@ class _PlayerScreenState extends State<PlayerScreen>
       // kullanıcı seçer (issue #5). Geçmişten belirli bir bölümle
       // gelindiyse (initialEntryKey) diyalog atlanır.
       var entryKey = widget.initialEntryKey;
-      if (entryKey == null) {
-        try {
-          final entries = await listPlayableEntries(nzbPath: widget.nzbPath);
+      try {
+        final entries = await listPlayableEntries(nzbPath: widget.nzbPath);
+        if (!mounted) return;
+        _playableEntries = entries;
+        if (entryKey == null && entries.length > 1) {
+          entryKey = await showPlayableEntryPicker(context, entries);
+          if (entryKey == null) {
+            if (mounted && Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+            return;
+          }
+        }
+        String? archiveSetKey;
+        if (entryKey == null) {
+          final single = entries.length == 1 ? entries.single.key : null;
+          if (_isArchiveKey(single)) archiveSetKey = single;
+        } else if (entryKey != widget.initialEntryKey &&
+            _isArchiveKey(entryKey) &&
+            !entryKey.contains('|')) {
+          archiveSetKey = entryKey;
+        }
+        if (archiveSetKey != null) {
+          setState(
+            () => _status = AppLocalizations.of(context).statusConnecting,
+          );
+          final members = await listArchiveEntries(
+            config: ProviderConfigDto(
+              host: settings.host,
+              port: settings.port,
+              username: settings.username,
+              password: settings.password,
+              maxConnections: settings.maxConnections,
+            ),
+            nzbPath: widget.nzbPath,
+            entryKey: archiveSetKey,
+          ).timeout(widget.streamPreparationTimeout);
           if (!mounted) return;
-          if (entries.length > 1) {
-            entryKey = await showPlayableEntryPicker(context, entries);
-            if (entryKey == null) {
-              // Kullanıcı vazgeçti: oynatıcıyı hiç başlatmadan geri dön.
+          _archiveMembers = members;
+          if (members.length > 1) {
+            final memberKey = await showPlayableEntryPicker(
+              context,
+              members,
+            );
+            if (memberKey == null) {
               if (mounted && Navigator.of(context).canPop()) {
                 Navigator.of(context).pop();
               }
               return;
             }
+            entryKey = memberKey;
           }
-          final archiveKey =
-              entryKey ?? (entries.length == 1 ? entries.single.key : null);
-          if (archiveKey != null &&
-              (archiveKey.startsWith('rar:') ||
-                  archiveKey.startsWith('7z:') ||
-                  archiveKey.startsWith('probe:'))) {
-            setState(
-              () => _status = AppLocalizations.of(context).statusConnecting,
-            );
-            final members = await listArchiveEntries(
-              config: ProviderConfigDto(
-                host: settings.host,
-                port: settings.port,
-                username: settings.username,
-                password: settings.password,
-                maxConnections: settings.maxConnections,
-              ),
-              nzbPath: widget.nzbPath,
-              entryKey: archiveKey,
-            ).timeout(widget.streamPreparationTimeout);
-            if (!mounted) return;
-            if (members.length > 1) {
-              final memberKey = await showPlayableEntryPicker(
-                context,
-                members,
-              );
-              if (memberKey == null) {
-                if (mounted && Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                }
-                return;
-              }
-              entryKey = memberKey;
-            }
-          }
-        } catch (_) {
-          // Listeleme başarısızsa (bozuk NZB) anahtarsız yola düşülür:
-          // beginStream'in kendi ayrıntılı hatası mevcut hata yüzeyine gelir.
         }
+      } catch (_) {
+        // Listeleme başarısızsa (bozuk NZB) anahtarsız yola düşülür:
+        // beginStream'in kendi ayrıntılı hatası mevcut hata yüzeyine gelir.
       }
       _resolvedEntryKey = entryKey;
 
@@ -495,6 +503,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       final info = await awaitStream(sessionId: sessionId);
       _pendingSessionId = null;
       _nativeStream = info;
+      unawaited(_backfillArchiveMembers());
 
       if (!mounted || _startupFailed) {
         await _releaseNativeStream();
@@ -2512,6 +2521,98 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  Future<void> _switchEpisode() async {
+    final top = _playableEntries;
+    final members = _archiveMembers;
+    final List<PlayableEntryDto> candidates;
+    if (top != null && top.length > 1) {
+      candidates = top;
+    } else if (members != null && members.length > 1) {
+      candidates = members;
+    } else {
+      return;
+    }
+    var entryKey = await showPlayableEntryPicker(context, candidates);
+    if (entryKey == null || !mounted) return;
+    // Üst seviyeden arşiv seti seçildiyse üyeleri çöz (başlangıç akışıyla
+    // aynı adımlar); tek üyeli setin set anahtarı yeterlidir.
+    if (_isArchiveKey(entryKey) && !entryKey.contains('|')) {
+      try {
+        final store = widget.store ?? ProviderSettingsStore();
+        final settings = await store.load();
+        if (!settings.isComplete || !mounted) return;
+        final resolved = await listArchiveEntries(
+          config: ProviderConfigDto(
+            host: settings.host,
+            port: settings.port,
+            username: settings.username,
+            password: settings.password,
+            maxConnections: settings.maxConnections,
+          ),
+          nzbPath: widget.nzbPath,
+          entryKey: entryKey,
+        ).timeout(widget.streamPreparationTimeout);
+        if (!mounted) return;
+        if (resolved.length > 1) {
+          final memberKey = await showPlayableEntryPicker(context, resolved);
+          if (memberKey == null) return;
+          entryKey = memberKey;
+        }
+      } catch (_) {
+        return;
+      }
+    }
+    if (!mounted) return;
+    final videoState = _videoKey.currentState;
+    if (videoState?.isFullscreen() ?? false) {
+      await videoState!.exitFullscreen();
+    }
+    if (_isPictureInPicture) await _togglePictureInPicture();
+    await _saveHistoryPosition();
+    if (!mounted) return;
+    unawaited(_player.stop());
+    await _releaseNativeStream();
+    if (!mounted) return;
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerScreen(
+          nzbPath: widget.nzbPath,
+          store: widget.store,
+          preferenceStore: widget.preferenceStore,
+          historyStore: widget.historyStore,
+          pictureInPictureWindow: widget.pictureInPictureWindow,
+          initialEntryKey: entryKey,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _backfillArchiveMembers() async {
+    if (_archiveMembers != null) return;
+    final entries = _playableEntries;
+    if (entries == null || entries.length != 1) return;
+    final setKey = entries.single.key;
+    if (!_isArchiveKey(setKey)) return;
+    try {
+      final store = widget.store ?? ProviderSettingsStore();
+      final settings = await store.load();
+      if (!settings.isComplete || !mounted || _disposing) return;
+      final members = await listArchiveEntries(
+        config: ProviderConfigDto(
+          host: settings.host,
+          port: settings.port,
+          username: settings.username,
+          password: settings.password,
+          maxConnections: settings.maxConnections,
+        ),
+        nzbPath: widget.nzbPath,
+        entryKey: setKey,
+      ).timeout(widget.streamPreparationTimeout);
+      if (!mounted || _disposing || _archiveMembers != null) return;
+      setState(() => _archiveMembers = members);
+    } catch (_) {}
+  }
+
   bool get _systemPictureInPicture =>
       _isPictureInPicture && defaultTargetPlatform == TargetPlatform.android;
 
@@ -3380,6 +3481,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                     unawaited(_loadExternalSubtitle()),
                 onShowAdvancedSettings: (position) =>
                     unawaited(_showAdvancedSettings(position)),
+                onEpisodeSwitch: _hasMultipleEpisodes
+                    ? () => unawaited(_switchEpisode())
+                    : null,
+                hasMultipleEpisodes: _hasMultipleEpisodes,
               ),
             ),
           ),

@@ -184,6 +184,7 @@
   "castPlayingOn": "Playing on {device}",
   "castDisconnect": "Disconnect",
   "castFailed": "Casting failed: {error}",
+  "episodeSwitch": "Сменить серию",
   "subtitleFont": "Subtitle font",
   "entryPickerTitle": "Choose what to play",
   "entryPickerSubtitle": "This NZB contains multiple videos — pick one to start streaming.",
