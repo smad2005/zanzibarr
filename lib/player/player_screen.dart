@@ -2398,6 +2398,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       await state!.exitFullscreen();
     }
     if (_isPictureInPicture) await _togglePictureInPicture();
+    await _saveHistoryPosition();
     if (mounted) await Navigator.of(context).maybePop();
   }
 
