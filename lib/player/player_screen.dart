@@ -2551,11 +2551,19 @@ class _PlayerScreenState extends State<PlayerScreen>
           Icons.replay_rounded,
           '←',
         ),
-        _contextItem(
-          _PlayerContextAction.seekForward,
-          l10n.seekForwardSeconds(_seekStep.inSeconds),
-          Icons.forward_rounded,
-          '→',
+        PopupMenuItem<_PlayerContextAction>(
+          value: _PlayerContextAction.seekForward,
+          child: Row(
+            children: [
+              Transform.flip(
+                flipX: true,
+                child: const Icon(Icons.replay_rounded, size: 17, color: Colors.white70),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(l10n.seekForwardSeconds(_seekStep.inSeconds))),
+              const Text('→', style: TextStyle(color: Colors.white38, fontSize: 11)),
+            ],
+          ),
         ),
         const PopupMenuDivider(),
         _contextItem(
@@ -3638,3 +3646,5 @@ class _RepairProgressPanel extends StatelessWidget {
     );
   }
 }
+
+
