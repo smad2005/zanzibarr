@@ -255,10 +255,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _subtitleUpdateRunning = false;
   Future<void>? _subtitleDrainFuture;
 
-  // İzleme geçmişi: konum 5 sn'de bir ve kapanışta depoya yazılır; oynatma
-  // hazır olduğunda (bir kez) kayıtlı konuma dönülür.
+  // İzleme geçmişi: konum 5 sn'de bir ve kapanışta depoya yazılır.
   Timer? _historySaveTimer;
-  bool _historyResumeDone = false;
 
   String? _resolvedEntryKey;
   List<PlayableEntryDto>? _playableEntries;
@@ -529,7 +527,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         _onStartupTimeout,
         after: info.compressed ? _compressedOpenTimeout : null,
       );
-      await _player.open(Media(info.url));
+      final resumePosition = await _historyResumeTarget();
+      if (!mounted || _startupFailed) return;
+      await _player.open(Media(info.url, start: resumePosition));
 
       if (!mounted || _startupFailed) return;
       // Stream olayı open() future'undan hemen önce gelmişse state'i de
@@ -727,10 +727,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     debugPrint('PROBE: volume = ${await prop('volume')}');
   }
 
-  /// Oynatma hazır olduğunda kayıtlı konuma (varsa) döner ve ilerlemeyi
-  /// düzenli aralıklarla depoya yazar.
+  /// Oynatma hazır olduğunda ilerlemeyi düzenli aralıklarla depoya yazar.
   void _startHistoryTracking() {
-    unawaited(_resumeFromHistory());
     _historySaveTimer?.cancel();
     _historySaveTimer = Timer.periodic(
       const Duration(seconds: 5),
@@ -738,29 +736,25 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Future<void> _resumeFromHistory() async {
-    if (_historyResumeDone) return;
-    _historyResumeDone = true;
+  Future<Duration?> _historyResumeTarget() async {
     try {
       final entry = await _historyStore.entryFor(
         widget.nzbPath,
         entryKey: _resolvedEntryKey,
       );
-      if (entry == null || _disposing) return;
-      // Son %3'e ulaşılmış içerik izlenmiş sayılır; kayıt düşülüp baştan
-      // başlanır.
+      if (entry == null || _disposing) return null;
       if (entry.isCompleted) {
         await _historyStore.remove(
           widget.nzbPath,
           entryKey: _resolvedEntryKey,
         );
-        return;
+        return null;
       }
       final target = entry.position;
-      if (target < const Duration(seconds: 3)) return;
-      await _player.seek(target);
+      if (target < const Duration(seconds: 3)) return null;
+      return target;
     } catch (_) {
-      // Geçmiş okunamazsa oynatma baştan başlar.
+      return null;
     }
   }
 
