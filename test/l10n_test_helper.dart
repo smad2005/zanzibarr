@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zanzibarr/l10n/app_localizations.dart';
+import 'package:zanzibarr/main.dart' show appRouteObserver;
 import 'package:zanzibarr/settings/ui_preferences.dart';
 
 /// Widget testlerinde Türkçe arayüz beklentilerini koruyan ortak sarmalayıcı.
@@ -17,6 +18,7 @@ Widget l10nTestApp(Widget home) => MaterialApp(
   ],
   supportedLocales: AppLocalizations.supportedLocales,
   locale: const Locale('tr'),
+  navigatorObservers: [appRouteObserver],
   home: home,
 );
 

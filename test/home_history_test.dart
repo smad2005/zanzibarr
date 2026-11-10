@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zanzibarr/main.dart';
 import 'package:zanzibarr/player/media_preferences.dart';
@@ -66,5 +69,40 @@ void main() {
 
     expect(find.text('İzlemeye devam et'), findsNothing);
     expect(find.text('NZB seç ve oynat'), findsOneWidget);
+  });
+
+  testWidgets('The history list is refreshed upon returning from the player', (tester) async {
+    final storage = _MemoryPreferenceStorage();
+    final store = PlaybackHistoryStore(storage: storage);
+
+    await tester.pumpWidget(l10nTestApp(HomeScreen(historyStore: store)));
+    await tester.pumpAndSettle();
+    expect(find.text('İzlemeye devam et'), findsNothing);
+
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('oynatici')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await store.save(
+      const PlaybackHistoryEntry(
+        nzbPath: '/media/Yeni.Film.2026.nzb',
+        title: 'Yeni.Film.2026',
+        positionSeconds: 120,
+        durationSeconds: 3600,
+        updatedAtMs: 2,
+      ),
+    );
+
+    navigator.pop();
+    await tester.pumpAndSettle();
+
+    expect(find.text('İzlemeye devam et'), findsOneWidget);
+    expect(find.text('Yeni.Film.2026'), findsOneWidget);
   });
 }

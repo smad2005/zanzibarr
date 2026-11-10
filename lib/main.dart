@@ -104,6 +104,9 @@ class _ZanzibarrBootstrapState extends State<ZanzibarrBootstrap> {
   );
 }
 
+final RouteObserver<ModalRoute<void>> appRouteObserver =
+    RouteObserver<ModalRoute<void>>();
+
 class ZanzibarrApp extends StatelessWidget {
   const ZanzibarrApp({super.key, this.home, this.uiPreferences});
 
@@ -120,6 +123,7 @@ class ZanzibarrApp extends StatelessWidget {
       builder: (context, _) => MaterialApp(
         title: 'Zanzibarr',
         debugShowCheckedModeBanner: false,
+        navigatorObservers: [appRouteObserver],
         localizationsDelegates: const [
           AppLocalizations.delegate,
           GlobalMaterialLocalizations.delegate,
@@ -414,7 +418,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with RouteAware {
   bool _pickingFile = false;
   bool _openingIndexer = false;
   late final PlaybackHistoryStore _historyStore =
@@ -435,7 +439,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    appRouteObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void didPopNext() {
+    _loadHistory();
+  }
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     if (Platform.isAndroid) _openFileChannel.setMethodCallHandler(null);
     super.dispose();
   }

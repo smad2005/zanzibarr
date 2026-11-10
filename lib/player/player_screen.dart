@@ -2402,7 +2402,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     if (_isPictureInPicture) await _togglePictureInPicture();
     await _saveHistoryPosition();
-    if (mounted) await Navigator.of(context).maybePop();
+
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 
   /// Hata ekranındaki "PAR2 ile onar" akışı: oturum başlatılır, ilerleme
@@ -3371,19 +3374,27 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: _error != null
-          ? _ErrorView(
-              message: _error.toString(),
-              onClose: () => unawaited(_closePlayer()),
-              repairActive: _repairActive,
-              repairProgress: _repairProgress,
-              repairError: _repairError,
-              onRepair: _repairActive ? null : () => unawaited(_startRepair()),
-              onCancelRepair: _cancelRepair,
-            )
-          : _buildVideoSurface(),
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) closePlayer();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: _error != null
+            ? _ErrorView(
+                message: _error.toString(),
+                onClose: () => unawaited(_closePlayer()),
+                repairActive: _repairActive,
+                repairProgress: _repairProgress,
+                repairError: _repairError,
+                onRepair: _repairActive
+                    ? null
+                    : () => unawaited(_startRepair()),
+                onCancelRepair: _cancelRepair,
+              )
+            : _buildVideoSurface(),
+      ),
     );
   }
 
