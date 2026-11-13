@@ -539,6 +539,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get seekStepLabel => 'シークステップ';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => '定期情報';
 
   @override

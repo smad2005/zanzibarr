@@ -550,6 +550,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get seekStepLabel => 'Sprungweite';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => 'Periodische Info';
 
   @override

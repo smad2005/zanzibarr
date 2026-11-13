@@ -17,6 +17,7 @@ import '../settings/provider_settings.dart';
 import '../src/rust/api/repair.dart';
 import '../src/rust/api/streaming.dart';
 import 'advanced_playback_controller.dart';
+import 'chapter.dart';
 import 'entry_picker.dart';
 import 'gyuni_player_controls.dart';
 import 'media_preferences.dart';
@@ -128,6 +129,31 @@ class _PlayerScreenState extends State<PlayerScreen>
   StreamSubscription<Duration>? _castDurationSubscription;
   StreamSubscription<SessionState>? _castStateSubscription;
   bool _castBusy = false;
+
+  List<Chapter> _chapters = const [];
+  bool _chaptersLoaded = false;
+
+  Future<void> _loadChapters() async {
+    if (_chaptersLoaded) return;
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    try {
+      final countRaw = await platform.getProperty('chapter-list/count');
+      final count = int.tryParse(countRaw.trim()) ?? 0;
+      final chapters = await parseChapters(
+        count: count,
+        chapterProperty: platform.getProperty,
+      );
+      if (mounted) {
+        setState(() {
+          _chapters = chapters;
+          _chaptersLoaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _chaptersLoaded = true);
+    }
+  }
 
   bool get _casting => _castSession != null;
 
@@ -323,6 +349,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _durationSubscription = _player.stream.duration.listen((duration) {
       if (!mounted) return;
       setState(() => _duration = duration);
+      if (duration > Duration.zero && !_chaptersLoaded) {
+        unawaited(_loadChapters());
+      }
     });
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (!mounted) return;
@@ -516,6 +545,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         _rate = _playback.rate;
         _zoom = _playback.zoom;
         _startupActive = true;
+        _chapters = const [];
+        _chaptersLoaded = false;
         _status = info.compressed
             ? l10n.statusPreparingCompressed
             : l10n.statusReadingVideoStructure(info.filename);
@@ -1106,7 +1137,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _loadPreferences() async {
     final preferences = await _preferenceStore.load(widget.nzbPath);
     final globalSeekStep = await _preferenceStore.loadSeekStepSeconds();
-    _preferences = preferences;
+    final globalShowChapters = await _preferenceStore.loadShowChapters();
+    _preferences = globalShowChapters == null
+        ? preferences
+        : preferences.copyWith(showChapters: globalShowChapters);
     _canvasCommitted = CanvasCrop(
       left: preferences.crop.left,
       top: preferences.crop.top,
@@ -1239,6 +1273,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       subtitleFont: _subtitleFont,
       audioDelaySeconds:
           _audioDelay.inMicroseconds / Duration.microsecondsPerSecond,
+      showChapters: _preferences.showChapters,
     );
     _preferences = preferences;
     final write = _preferenceWriteTail.then((_) async {
@@ -1912,6 +1947,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             _subtitleDelay.inMicroseconds / Duration.microsecondsPerSecond,
         audioDelaySeconds:
             _audioDelay.inMicroseconds / Duration.microsecondsPerSecond,
+        showChapters: _preferences.showChapters,
       );
       if (mounted) setState(() => _canvasEditing = false);
       await _persistPreferences();
@@ -1970,6 +2006,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             _subtitleDelay.inMicroseconds / Duration.microsecondsPerSecond,
         audioDelaySeconds:
             _audioDelay.inMicroseconds / Duration.microsecondsPerSecond,
+        showChapters: _preferences.showChapters,
       );
       if (mounted) setState(() => _zoom = _playback.zoom);
       await _persistPreferences();
@@ -2064,8 +2101,15 @@ class _PlayerScreenState extends State<PlayerScreen>
           _subtitleDelay.inMicroseconds / Duration.microsecondsPerSecond,
       audioDelaySeconds:
           _audioDelay.inMicroseconds / Duration.microsecondsPerSecond,
+      showChapters: _preferences.showChapters,
     );
     _configurePeriodicInfoTimer();
+    await _persistPreferences();
+  }
+
+  Future<void> _setShowChapters(bool value) async {
+    setState(() => _preferences = _preferences.copyWith(showChapters: value));
+    await _preferenceStore.saveShowChapters(value);
     await _persistPreferences();
   }
 
@@ -3052,6 +3096,16 @@ class _PlayerScreenState extends State<PlayerScreen>
                         ),
                       ),
                       _TuningRow(
+                        label: l10n.showChapters,
+                        child: Switch(
+                          value: _preferences.showChapters,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          onChanged: (value) =>
+                              unawaited(refresh(_setShowChapters(value))),
+                        ),
+                      ),
+                      _TuningRow(
                         label: l10n.audioSyncLabel,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -3490,6 +3544,16 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ? () => unawaited(_switchEpisode())
                     : null,
                 hasMultipleEpisodes: _hasMultipleEpisodes,
+                chapters: _chapters,
+                onChapterTap: (start) {
+                  final castSession = _castSession;
+                  if (castSession != null) {
+                    unawaited(castSession.seek(start));
+                  } else {
+                    unawaited(_player.seek(start));
+                  }
+                },
+                showChapters: _preferences.showChapters,
               ),
             ),
           ),

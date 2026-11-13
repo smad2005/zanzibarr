@@ -1,9 +1,11 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../l10n/app_localizations.dart';
+import 'chapter.dart';
 
 const _accent = Color(0xFFFF453A);
 
@@ -47,6 +49,8 @@ class GyuniPlayerChrome extends StatelessWidget {
     required this.volume,
     required this.onVolumeChanged,
     required this.onToggleMute,
+    required this.chapters,
+    required this.onChapterTap,
     this.previewImage,
     this.previewPosition,
     this.editorOverlay,
@@ -65,6 +69,7 @@ class GyuniPlayerChrome extends StatelessWidget {
     this.playButtonFocusNode,
     this.onEpisodeSwitch,
     this.hasMultipleEpisodes = false,
+    this.showChapters = true,
   });
 
   final bool visible;
@@ -77,6 +82,10 @@ class GyuniPlayerChrome extends StatelessWidget {
   final bool subtitleControlsActive;
   final bool videoFill;
   final bool pictureInPictureSupported;
+
+  final List<Chapter> chapters;
+  final ValueChanged<Duration> onChapterTap;
+  final bool showChapters;
 
   /// Cast düğmesi ancak motor LAN paylaşım URL'si üretebildiyse görünür.
   final bool castAvailable;
@@ -267,6 +276,9 @@ class GyuniPlayerChrome extends StatelessWidget {
                           onShowAdvancedSettings: onShowAdvancedSettings,
                           onEpisodeSwitch: onEpisodeSwitch,
                           hasMultipleEpisodes: hasMultipleEpisodes,
+                          chapters: chapters,
+                          onChapterTap: onChapterTap,
+                          showChapters: showChapters,
                         ),
                       ],
                     ),
@@ -616,11 +628,14 @@ class _BottomControls extends StatelessWidget {
     required this.onSubtitleSelected,
     required this.onAudioSelected,
     required this.onShowAdvancedSettings,
+    required this.chapters,
+    required this.onChapterTap,
     this.onLoadExternalAudio,
     this.onLoadExternalSubtitle,
     this.playButtonFocusNode,
     this.onEpisodeSwitch,
     this.hasMultipleEpisodes = false,
+    this.showChapters = true,
   });
 
   final bool ready;
@@ -653,6 +668,9 @@ class _BottomControls extends StatelessWidget {
   final FocusNode? playButtonFocusNode;
   final VoidCallback? onEpisodeSwitch;
   final bool hasMultipleEpisodes;
+  final List<Chapter> chapters;
+  final ValueChanged<Duration> onChapterTap;
+  final bool showChapters;
 
   @override
   Widget build(BuildContext context) {
@@ -664,6 +682,17 @@ class _BottomControls extends StatelessWidget {
         .toDouble()
         .clamp(0.0, maximum)
         .toDouble();
+    // Shared by the thumb (SliderTheme below) and the chapter ticks, whose
+    // positions must follow the same track geometry.
+    final sliderTheme = SliderTheme.of(context).copyWith(
+      trackHeight: 2,
+      activeTrackColor: Colors.white70,
+      inactiveTrackColor: Colors.white24,
+      thumbColor: _accent,
+      overlayColor: _accent.withValues(alpha: 0.14),
+      thumbShape: const _TimelineThumbShape(),
+      overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+    );
     return Positioned(
       left: 0,
       right: 0,
@@ -689,17 +718,7 @@ class _BottomControls extends StatelessWidget {
                     clipBehavior: Clip.none,
                     children: [
                       SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 2,
-                          activeTrackColor: Colors.white70,
-                          inactiveTrackColor: Colors.white24,
-                          thumbColor: _accent,
-                          overlayColor: _accent.withValues(alpha: 0.14),
-                          thumbShape: const _TimelineThumbShape(),
-                          overlayShape: const RoundSliderOverlayShape(
-                            overlayRadius: 12,
-                          ),
-                        ),
+                        data: sliderTheme,
                         child: Slider(
                           value: value,
                           max: maximum,
@@ -723,6 +742,63 @@ class _BottomControls extends StatelessWidget {
                               : null,
                         ),
                       ),
+                      if (showChapters && duration.inMilliseconds > 0)
+                        ...chapters.map((chapter) {
+                          final ratio =
+                              (chapter.start.inMilliseconds /
+                                      duration.inMilliseconds)
+                                  .clamp(0.0, 1.0);
+                          // The thumb travels the track rect, which the
+                          // default RoundedRectSliderTrackShape insets by
+                          // half the overlay width on each side. Map the
+                          // ticks with the same geometry so they land ON the
+                          // seek bar instead of drifting past its ends.
+                          final trackInset =
+                              sliderTheme.overlayShape!
+                                      .getPreferredSize(true, false)
+                                      .width /
+                                  2;
+                          final trackWidth = math.max(
+                            0.0,
+                            constraints.maxWidth - 2 * trackInset,
+                          );
+                          final rtl =
+                              Directionality.of(context) == TextDirection.rtl;
+                          final center =
+                              trackInset +
+                              (rtl ? 1 - ratio : ratio) * trackWidth;
+                          const hitTargetWidth = 16.0;
+                          const dotSize = 5.0;
+                          return Positioned(
+                            key: ValueKey(chapter.start),
+                            left: (center - hitTargetWidth / 2).clamp(
+                              0.0,
+                              math.max(
+                                0.0,
+                                constraints.maxWidth - hitTargetWidth,
+                              ),
+                            ),
+                            top: 0,
+                            bottom: 0,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onTap: () => onChapterTap(chapter.start),
+                              child: SizedBox(
+                                width: hitTargetWidth,
+                                child: Center(
+                                  child: Container(
+                                    width: dotSize,
+                                    height: dotSize,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white70,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
                       if (previewPosition case final preview?)
                         _TimelinePreview(
                           image: previewImage,

@@ -546,6 +546,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get seekStepLabel => 'گام جستجو';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => 'اطلاعات دوره‌ای';
 
   @override

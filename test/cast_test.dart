@@ -181,6 +181,8 @@ Widget buildCastChrome({
         castAvailable: castAvailable,
         casting: casting,
         onCast: onCast,
+        chapters: const [],
+        onChapterTap: (_) {},
         onActivity: () {},
         onVideoTap: () {},
         onTogglePlay: () {},

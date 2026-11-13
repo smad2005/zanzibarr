@@ -548,6 +548,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get seekStepLabel => 'Salto de búsqueda';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => 'Información periódica';
 
   @override

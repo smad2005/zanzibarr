@@ -546,6 +546,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get seekStepLabel => 'Seek adımı';
 
   @override
+  String get showChapters => 'Bölümleri göster';
+
+  @override
   String get periodicInfoLabel => 'Periyodik bilgi';
 
   @override

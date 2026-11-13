@@ -539,6 +539,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get seekStepLabel => '탐색 단위';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => '주기적 정보';
 
   @override

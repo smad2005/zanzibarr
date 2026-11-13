@@ -545,6 +545,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get seekStepLabel => 'خطوة التنقل';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => 'معلومات دورية';
 
   @override

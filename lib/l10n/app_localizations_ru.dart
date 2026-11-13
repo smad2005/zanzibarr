@@ -549,6 +549,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get seekStepLabel => 'Шаг перемотки';
 
   @override
+  String get showChapters => 'Показывать главы';
+
+  @override
   String get periodicInfoLabel => 'Периодическая информация';
 
   @override

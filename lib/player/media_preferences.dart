@@ -177,6 +177,7 @@ class MediaPreferences {
     String subtitleColor = defaultSubtitleColor,
     String subtitleFont = kDefaultSubtitleFontId,
     double audioDelaySeconds = 0,
+    bool showChapters = defaultShowChapters,
   }) => MediaPreferences._(
     crop: crop,
     aspectRatio: _sanitizeAspectRatio(aspectRatio),
@@ -207,6 +208,7 @@ class MediaPreferences {
       audioDelaySeconds,
       0,
     ).clamp(-maximumDelaySeconds, maximumDelaySeconds).toDouble(),
+    showChapters: showChapters,
   );
 
   const MediaPreferences._({
@@ -225,12 +227,14 @@ class MediaPreferences {
     required this.subtitleColor,
     required this.subtitleFont,
     required this.audioDelaySeconds,
+    required this.showChapters,
   });
 
   static const schemaVersion = 1;
   static const minimumSeekStepSeconds = 1;
   static const maximumSeekStepSeconds = 600;
   static const defaultSeekStepSeconds = 1;
+  static const defaultShowChapters = true;
   static const minimumPeriodicInfoInterval = Duration(milliseconds: 250);
   static const maximumPeriodicInfoInterval = Duration(minutes: 1);
   static const defaultVideoPreset = 'auto';
@@ -270,6 +274,8 @@ class MediaPreferences {
   final String subtitleFont;
   final double audioDelaySeconds;
 
+  final bool showChapters;
+
   bool get periodicInfoEnabled => periodicInfoInterval != null;
 
   static MediaPreferences defaults() => MediaPreferences();
@@ -291,6 +297,7 @@ class MediaPreferences {
     'subtitleColor': subtitleColor,
     'subtitleFont': subtitleFont,
     'audioDelaySeconds': audioDelaySeconds,
+    'showChapters': showChapters,
   };
 
   String encode() => jsonEncode(toJson());
@@ -336,6 +343,10 @@ class MediaPreferences {
         subtitleColor: _stringOr(value['subtitleColor'], defaultSubtitleColor),
         subtitleFont: _stringOr(value['subtitleFont'], kDefaultSubtitleFontId),
         audioDelaySeconds: _numberOr(value['audioDelaySeconds'], 0),
+        showChapters: _boolOr(
+          value['showChapters'],
+          defaultShowChapters,
+        ),
       );
     } on FormatException {
       return defaults();
@@ -386,7 +397,8 @@ class MediaPreferences {
       subtitleDelaySeconds == other.subtitleDelaySeconds &&
       subtitleColor == other.subtitleColor &&
       subtitleFont == other.subtitleFont &&
-      audioDelaySeconds == other.audioDelaySeconds;
+      audioDelaySeconds == other.audioDelaySeconds &&
+      showChapters == other.showChapters;
 
   @override
   int get hashCode => Object.hash(
@@ -405,7 +417,48 @@ class MediaPreferences {
     subtitleColor,
     subtitleFont,
     audioDelaySeconds,
+    showChapters,
   );
+
+  MediaPreferences copyWith({
+    NormalizedCropRect? crop,
+    double? aspectRatio,
+    NormalizedVector2? alignment,
+    NormalizedVector2? pan,
+    int? seekStepSeconds,
+    Duration? periodicInfoInterval,
+    String? videoPreset,
+    String? audioPreset,
+    String? upscalePreset,
+    double? subtitleScale,
+    double? subtitlePosition,
+    double? subtitleDelaySeconds,
+    String? subtitleColor,
+    String? subtitleFont,
+    double? audioDelaySeconds,
+    bool? showChapters,
+  }) {
+    return MediaPreferences(
+      crop: crop ?? this.crop,
+      aspectRatio: aspectRatio ?? this.aspectRatio,
+      alignment: alignment ?? this.alignment,
+      pan: pan ?? this.pan,
+      seekStepSeconds: seekStepSeconds ?? this.seekStepSeconds,
+      periodicInfoInterval:
+          periodicInfoInterval ?? this.periodicInfoInterval,
+      videoPreset: videoPreset ?? this.videoPreset,
+      audioPreset: audioPreset ?? this.audioPreset,
+      upscalePreset: upscalePreset ?? this.upscalePreset,
+      subtitleScale: subtitleScale ?? this.subtitleScale,
+      subtitlePosition: subtitlePosition ?? this.subtitlePosition,
+      subtitleDelaySeconds:
+          subtitleDelaySeconds ?? this.subtitleDelaySeconds,
+      subtitleColor: subtitleColor ?? this.subtitleColor,
+      subtitleFont: subtitleFont ?? this.subtitleFont,
+      audioDelaySeconds: audioDelaySeconds ?? this.audioDelaySeconds,
+      showChapters: showChapters ?? this.showChapters,
+    );
+  }
 }
 
 /// Persists [MediaPreferences] under a path-free per-media namespace.
@@ -458,6 +511,18 @@ class MediaPreferencesStore {
 
   Future<void> saveSeekStepSeconds(int seconds) =>
       _storage.write(seekStepKey, '$seconds');
+
+  static const showChaptersKey = 'zanzibarr.player.show_chapters';
+
+  Future<bool?> loadShowChapters() async {
+    final raw = await _storage.read(showChaptersKey);
+    if (raw == 'true') return true;
+    if (raw == 'false') return false;
+    return null;
+  }
+
+  Future<void> saveShowChapters(bool value) =>
+      _storage.write(showChaptersKey, '$value');
 }
 
 double _finiteOr(double value, double fallback) =>
@@ -479,3 +544,5 @@ int _integerOr(Object? value, int fallback) {
 
 String _stringOr(Object? value, String fallback) =>
     value is String ? value : fallback;
+
+bool _boolOr(Object? value, bool fallback) => value is bool ? value : fallback;

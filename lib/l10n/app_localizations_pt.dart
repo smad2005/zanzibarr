@@ -548,6 +548,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get seekStepLabel => 'Passo de busca';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => 'Informações periódicas';
 
   @override

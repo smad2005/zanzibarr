@@ -1070,6 +1070,12 @@ abstract class AppLocalizations {
   /// **'Seek step'**
   String get seekStepLabel;
 
+  /// No description provided for @showChapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Show chapters'**
+  String get showChapters;
+
   /// No description provided for @periodicInfoLabel.
   ///
   /// In en, this message translates to:

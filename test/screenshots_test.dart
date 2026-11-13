@@ -366,6 +366,8 @@ Widget _playerComposition({
           onToggleMute: () {},
           onLoadExternalAudio: () {},
           onLoadExternalSubtitle: () {},
+          chapters: const [],
+          onChapterTap: (_) {},
         ),
       ],
     ),

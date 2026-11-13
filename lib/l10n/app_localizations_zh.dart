@@ -537,6 +537,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get seekStepLabel => '跳转步长';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => '定期信息';
 
   @override

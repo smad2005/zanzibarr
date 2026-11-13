@@ -547,6 +547,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get seekStepLabel => 'सीक स्टेप';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => 'आवधिक जानकारी';
 
   @override

@@ -549,6 +549,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get seekStepLabel => 'Passo di ricerca';
 
   @override
+  String get showChapters => 'Show chapters';
+
+  @override
   String get periodicInfoLabel => 'Info periodiche';
 
   @override

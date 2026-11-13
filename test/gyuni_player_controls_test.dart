@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:zanzibarr/player/chapter.dart';
 import 'package:zanzibarr/player/gyuni_player_controls.dart';
 
 import 'l10n_test_helper.dart';
@@ -20,6 +21,9 @@ Widget _buildChrome({
   ValueChanged<Offset>? onShowAdvancedSettings,
   bool hasMultipleEpisodes = false,
   VoidCallback? onEpisodeSwitch,
+  List<Chapter> chapters = const [],
+  ValueChanged<Duration>? onChapterTap,
+  bool showChapters = true,
 }) {
   return l10nTestApp(
     Scaffold(
@@ -64,6 +68,9 @@ Widget _buildChrome({
           onShowAdvancedSettings: onShowAdvancedSettings ?? (_) {},
           onVolumeChanged: onVolumeChanged ?? (_) {},
           onToggleMute: onToggleMute ?? () {},
+          chapters: chapters,
+          onChapterTap: onChapterTap ?? (_) {},
+          showChapters: showChapters,
           onLoadExternalAudio: onLoadExternalAudio,
           onLoadExternalSubtitle: onLoadExternalSubtitle,
           hasMultipleEpisodes: hasMultipleEpisodes,
@@ -245,5 +252,99 @@ void main() {
     await tester.pump();
 
     expect(positions, isEmpty);
+  });
+
+  testWidgets('chapter ticks are drawn for each chapter', (tester) async {
+    final taps = <Duration>[];
+    await tester.pumpWidget(
+      _buildChrome(
+        chapters: const [
+          Chapter(start: Duration(seconds: 10), title: 'Intro'),
+        ],
+        onChapterTap: taps.add,
+        showChapters: true,
+      ),
+    );
+
+    final tick = find.byKey(ValueKey(Duration(seconds: 10)));
+    expect(tick, findsOneWidget);
+
+    final dot = tester.widget<Container>(
+      find.descendant(of: tick, matching: find.byType(Container)),
+    );
+    final decoration = dot.decoration! as BoxDecoration;
+    expect(decoration.shape, BoxShape.circle);
+    expect(dot.constraints?.maxWidth, 5);
+    expect(dot.constraints?.maxHeight, 5);
+
+    await tester.tap(tick);
+    await tester.pump(const Duration(milliseconds: 301));
+
+    expect(taps, <Duration>[Duration(seconds: 10)]);
+  });
+
+  testWidgets('chapter ticks follow the slider track geometry', (tester) async {
+    await tester.pumpWidget(
+      _buildChrome(
+        chapters: const [
+          Chapter(start: Duration(seconds: 10), title: 'Intro'),
+          Chapter(start: Duration(minutes: 45), title: 'Mid'),
+        ],
+      ),
+    );
+
+    // The thumb (and therefore a chapter tick) is mapped over the track
+    // rect, which the default RoundedRectSliderTrackShape insets by half
+    // the overlay width (12) on each side. The chrome adds 16 px of
+    // horizontal padding around the slider.
+    const chromePadding = 16.0;
+    const trackInset = 12.0;
+    const sliderWidth = 780.0 - 2 * chromePadding;
+    double expectedX(Duration start) {
+      final ratio = start.inMilliseconds /
+          const Duration(minutes: 90).inMilliseconds;
+      return chromePadding +
+          trackInset +
+          ratio * (sliderWidth - 2 * trackInset);
+    }
+
+    // A chapter near the start is the discriminating case: the old
+    // ratio * fullWidth mapping put it at ~17 px while the track only
+    // begins at 16 + 12 = 28 px.
+    final intro = find.byKey(ValueKey(Duration(seconds: 10)));
+    expect(intro, findsOneWidget);
+    expect(
+      tester.getRect(intro).center.dx,
+      closeTo(expectedX(const Duration(seconds: 10)), 0.5),
+    );
+
+    final mid = find.byKey(ValueKey(Duration(minutes: 45)));
+    expect(mid, findsOneWidget);
+
+    final tapTarget = tester.getRect(mid);
+    expect(tapTarget.center.dx, closeTo(expectedX(const Duration(minutes: 45)), 0.5));
+    // 16 px wide tap target centered on the tick, spanning the bar height.
+    expect(tapTarget.width, 16);
+  });
+
+  testWidgets('no chapter ticks when chapters list is empty', (tester) async {
+    await tester.pumpWidget(_buildChrome(chapters: const []));
+
+    expect(find.byKey(ValueKey(Duration(seconds: 10))), findsNothing);
+  });
+
+  testWidgets('chapter ticks are hidden when showChapters is false', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildChrome(
+        chapters: const [
+          Chapter(start: Duration(seconds: 10), title: 'Intro'),
+        ],
+        showChapters: false,
+      ),
+    );
+
+    expect(find.byKey(ValueKey(Duration(seconds: 10))), findsNothing);
   });
 }

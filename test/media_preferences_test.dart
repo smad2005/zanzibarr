@@ -200,6 +200,30 @@ void main() {
     expect(await store.loadSeekStepSeconds(), isNull);
   });
 
+  test('show chapters is global and shared across media', () async {
+    final storage = _MemoryPreferenceStorage();
+    final store = MediaPreferencesStore(storage: storage);
+    expect(await store.loadShowChapters(), isNull);
+
+    await store.saveShowChapters(false);
+    expect(await store.loadShowChapters(), false);
+
+    await store.saveShowChapters(true);
+    expect(
+      MediaPreferencesStore(storage: storage).loadShowChapters(),
+      completion(true),
+    );
+  });
+
+  test('show chapters ignores garbage', () async {
+    final storage = _MemoryPreferenceStorage();
+    final store = MediaPreferencesStore(storage: storage);
+    storage.values[MediaPreferencesStore.showChaptersKey] = 'yes';
+    expect(await store.loadShowChapters(), isNull);
+    storage.values[MediaPreferencesStore.showChaptersKey] = '';
+    expect(await store.loadShowChapters(), isNull);
+  });
+
   test('clear deletes only the hashed media key', () async {
     final storage = _MemoryPreferenceStorage();
     final store = MediaPreferencesStore(storage: storage);
@@ -220,5 +244,27 @@ void main() {
       isTrue,
     );
     expect(await store.load(path), MediaPreferences.defaults());
+  });
+
+  test('showChapters defaults to true and round-trips through JSON', () {
+    expect(MediaPreferences().showChapters, isTrue);
+
+    final preferences = MediaPreferences(showChapters: false);
+    expect(preferences.showChapters, isFalse);
+
+    final decoded = MediaPreferences.decodeOrDefault(preferences.encode());
+    expect(decoded.showChapters, isFalse);
+
+    final copied = preferences.copyWith(showChapters: true);
+    expect(copied.showChapters, isTrue);
+    expect(preferences.showChapters, isFalse);
+  });
+
+  test('showChapters falls back to true when absent from JSON', () {
+    final decoded = MediaPreferences.decodeOrDefault(jsonEncode(<String, Object>{
+      'schemaVersion': MediaPreferences.schemaVersion,
+    }));
+
+    expect(decoded.showChapters, isTrue);
   });
 }
