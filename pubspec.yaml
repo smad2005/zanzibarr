@@ -97,6 +97,8 @@ flutter:
     - assets/fonts/subtitle.ttf
     - assets/fonts/subtitle_serif.ttf
     - assets/fonts/subtitle_mono.ttf
+    - assets/fonts/subtitle_arabic_sans.ttf
+    - assets/fonts/subtitle_arabic_serif.ttf
 
   # Altyazı font kataloğu (lib/player/subtitle_fonts.dart): aynı TTF'ler hem
   # Flutter UI önizlemesi (menüde kendi fontuyla gösterim) hem de libmpv

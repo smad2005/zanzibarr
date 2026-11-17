@@ -41,6 +41,30 @@ const kSubtitleFonts = <SubtitleFont>[
   ),
 ];
 
+/// Seçici dışı fontconfig fallback fontları. Seçili ana fontta bulunmayan
+/// Arapça gliflerin kare yerine bu ailelerden alınmasını sağlar; kullanıcıya
+/// ayrıca bir dil/font seçtirmek gerekmez.
+const kSubtitleFallbackFonts = <SubtitleFont>[
+  SubtitleFont(
+    id: 'arabic_sans',
+    asset: 'assets/fonts/subtitle_arabic_sans.ttf',
+    family: 'Noto Sans Arabic',
+  ),
+  SubtitleFont(
+    id: 'arabic_serif',
+    asset: 'assets/fonts/subtitle_arabic_serif.ttf',
+    family: 'Noto Naskh Arabic',
+  ),
+];
+
+/// Resolver'ın `sub-fonts-dir` dizinine çıkardığı tüm fontlar. Seçili ana
+/// fontlar ve onların eksik gliflerini karşılayan fallback'ler birlikte
+/// bulunmalı ki libass/fontconfig Arapça metni de doğru işleyebilsin.
+const kSubtitleFontAssets = <SubtitleFont>[
+  ...kSubtitleFonts,
+  ...kSubtitleFallbackFonts,
+];
+
 const kDefaultSubtitleFontId = 'sans';
 
 /// Kimliği bilinen fonta çözer; bilinmeyen kimlik varsayılana düşer.
@@ -70,12 +94,17 @@ class AssetSubtitleFontResolver implements SubtitleFontResolver {
   Future<SubtitleFontTarget> resolve(String id) async {
     final font = subtitleFontFor(id);
     final dir = await _fontsDirectory();
-    final file = File('${dir.path}/${font.id}.ttf');
-    // Katalog sabit ve asset'ler uygulamayla birlikte sürümlenir; dosya varsa
-    // tekrar yazılmaz (boyut kontrolü yeterli — içerik asset ile aynıdır).
-    final data = await rootBundle.load(font.asset);
-    if (!file.existsSync() || file.lengthSync() != data.lengthInBytes) {
-      await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
+    // Seçili fontun yanında fallback'ler de her zaman bulunur. Özellikle
+    // Arapça glifler ana Noto Sans/Serif/Mono fontlarında yoktur; fontconfig
+    // bunları ancak aynı dizindeki Arapça ailelerden tamamlayabilir.
+    for (final assetFont in kSubtitleFontAssets) {
+      final file = File('${dir.path}/${assetFont.id}.ttf');
+      // Katalog sabit ve asset'ler uygulamayla birlikte sürümlenir; dosya varsa
+      // tekrar yazılmaz (boyut kontrolü yeterli — içerik asset ile aynıdır).
+      final data = await rootBundle.load(assetFont.asset);
+      if (!file.existsSync() || file.lengthSync() != data.lengthInBytes) {
+        await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
+      }
     }
     return SubtitleFontTarget(fontsDir: dir.path, family: font.family);
   }
