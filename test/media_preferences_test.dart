@@ -335,4 +335,58 @@ void main() {
       expect(languageKept.externalSubtitles['e3.mkv']!.language, 'ar');
     });
   });
+
+  group('Ses kanali tercihi (şema v3)', () {
+    test('audioLanguage JSON gidiş-dönüşü yapılır', () {
+      final preferences = MediaPreferences(
+        subtitleLanguage: 'tr',
+        audioLanguage: 'kor',
+      );
+      final decoded =
+          MediaPreferences.decodeOrDefault(preferences.encode());
+      expect(decoded.audioLanguage, 'kor');
+      expect(decoded.subtitleLanguage, 'tr');
+      // Tercih yoksa JSON'da null yazılır ve null okunur.
+      final plain =
+          MediaPreferences.decodeOrDefault(MediaPreferences().encode());
+      expect(plain.audioLanguage, isNull);
+    });
+
+    test('Şema v1 ve v2 kayıtları audioLanguage varsayılanı ile okunur', () {
+      const v1 = '{"schemaVersion":1,"subtitleColor":"#FFD54F"}';
+      const v2 = '{"schemaVersion":2,"subtitleLanguage":"tr"}';
+      for (final encoded in [v1, v2]) {
+        final decoded = MediaPreferences.decodeOrDefault(encoded);
+        expect(decoded.audioLanguage, isNull);
+      }
+      // v2'deki diğer alanlar düşmez.
+      final decodedV2 = MediaPreferences.decodeOrDefault(v2);
+      expect(decodedV2.subtitleLanguage, 'tr');
+    });
+
+    test('audioLanguage geçersiz kodda null olur', () {
+      expect(MediaPreferences(audioLanguage: 'KOR').audioLanguage, 'kor');
+      expect(MediaPreferences(audioLanguage: 'xw').audioLanguage, 'xw');
+      expect(MediaPreferences(audioLanguage: 'turkish audio').audioLanguage,
+          isNull);
+      expect(MediaPreferences(audioLanguage: '').audioLanguage, isNull);
+    });
+
+    test('copyWithAudioLanguage tercihi günceller, kalan alanlar korunur', () {
+      final base = MediaPreferences(
+        subtitleLanguage: 'tr',
+        externalSubtitles: {
+          'e1.mkv': const ExternalSubtitle(path: '/e1.srt', language: 'tr'),
+        },
+      );
+      final korean = base.copyWithAudioLanguage('kor');
+      expect(korean.audioLanguage, 'kor');
+      expect(korean.subtitleLanguage, 'tr');
+      expect(korean.externalSubtitles['e1.mkv']!.path, '/e1.srt');
+      // 'Otomatik' seçimi tercihi temizler.
+      final cleared = korean.copyWithAudioLanguage(null);
+      expect(cleared.audioLanguage, isNull);
+      expect(cleared.subtitleLanguage, 'tr');
+    });
+  });
 }
