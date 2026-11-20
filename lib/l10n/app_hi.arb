@@ -245,5 +245,10 @@
   "settingsOsApiKeyLabel": "OpenSubtitles API key",
   "settingsOsUsernameLabel": "Username (optional)",
   "settingsOsPasswordLabel": "Password (optional)",
-  "settingsOsSaveLabel": "Save subtitle settings"
+  "settingsOsSaveLabel": "Save subtitle settings",
+  "saveSearchTooltip": "Save search",
+  "removeSavedSearchTooltip": "Remove saved search",
+  "searchClearRecentTooltip": "Clear recent searches",
+  "searchRecentTitle": "Recent searches",
+  "searchSavedTitle": "Saved searches"
 }

@@ -973,4 +973,19 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get settingsOsSaveLabel => 'Altyazı ayarlarını kaydet';
+
+  @override
+  String get saveSearchTooltip => 'Aramayı kaydet';
+
+  @override
+  String get removeSavedSearchTooltip => 'Kayıtlı aramayı kaldır';
+
+  @override
+  String get searchClearRecentTooltip => 'Son aramaları temizle';
+
+  @override
+  String get searchRecentTitle => 'Son aramalar';
+
+  @override
+  String get searchSavedTitle => 'Kayıtlı aramalar';
 }

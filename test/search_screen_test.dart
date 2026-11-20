@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zanzibarr/search/search_history.dart';
 import 'package:zanzibarr/search/search_screen.dart';
 import 'package:zanzibarr/settings/indexer_settings.dart';
 import 'package:zanzibarr/settings/provider_settings.dart';
@@ -106,6 +107,42 @@ Future<SearchPageDto> _fakeEasynewsSearch({
   required int limit,
   required int offset,
 }) async => SearchPageDto(total: BigInt.from(1), items: [_easynewsItem()]);
+
+
+/// Bellek ici arama gecmisi; ekran testlerinde gercek depo yerine gecer.
+class _FakeHistoryStore extends SearchHistoryStore {
+  List<String> recent = [];
+  List<String> saved = [];
+
+  @override
+  Future<List<String>> loadRecent() async => List.of(recent);
+
+  @override
+  Future<List<String>> loadSaved() async => List.of(saved);
+
+  @override
+  Future<void> recordSearch(String query) async {
+    final entry = SearchHistoryStore.normalizeQuery(query);
+    if (entry.isEmpty) return;
+    recent = [entry, ...recent.where((q) => q != entry)].take(20).toList();
+  }
+
+  @override
+  Future<void> clearRecent() async => recent = [];
+
+  @override
+  Future<void> saveSearch(String query) async {
+    final entry = SearchHistoryStore.normalizeQuery(query);
+    if (entry.isEmpty) return;
+    saved = [entry, ...saved.where((q) => q != entry)].take(20).toList();
+  }
+
+  @override
+  Future<void> removeSaved(String query) async {
+    final entry = SearchHistoryStore.normalizeQuery(query);
+    saved = saved.where((q) => q != entry).toList();
+  }
+}
 
 Future<void> _enterQueryAndSearch(WidgetTester tester, String query) async {
   await tester.enterText(find.byType(TextField), query);
@@ -642,6 +679,130 @@ void main() {
       expect(easynewsCalls, isNotEmpty);
       expect(easynewsCalls.first.first, startsWith('easynews:h1|'));
       expect(playedPath, '/tmp/easynews.nzb');
+    });
+  });
+
+  group('Arama gecmisi ve kayitli aramalar', () {
+    testWidgets('son ve kayitli aramalar cip olarak listelenir, cip arar', (
+      tester,
+    ) async {
+      final history = _FakeHistoryStore()
+        ..recent = ['eski film aramasi']
+        ..saved = ['kayitli dizi'];
+      String? searchedQuery;
+      await tester.pumpWithL10n(
+        SearchScreen(
+          store: _completeStore,
+          searchFn: ({
+            indexer,
+            easynews,
+            required query,
+            required limit,
+            required offset,
+          }) async {
+            searchedQuery = query;
+            return _fakeSearch(
+              indexer: indexer,
+              easynews: easynews,
+              query: query,
+              limit: limit,
+              offset: offset,
+            );
+          },
+          historyStore: history,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Bolum basliklari ve cipler gorunur; klasik ipucu gizlidir.
+      expect(find.text('Son aramalar'), findsOneWidget);
+      expect(find.text('Kayıtlı aramalar'), findsOneWidget);
+      expect(find.text('eski film aramasi'), findsOneWidget);
+      expect(find.text('kayitli dizi'), findsOneWidget);
+      expect(
+        find.text("Indexer'ınızda aramak için bir sürüm adı yazın."),
+        findsNothing,
+      );
+
+      // Cipe dokununca sorgu alana yazilir ve arama yapilir.
+      await tester.tap(find.text('kayitli dizi'));
+      await tester.pumpAndSettle();
+      expect(searchedQuery, 'kayitli dizi');
+      expect(find.byType(TextField).evaluate().first.widget as TextField, isNotNull);
+    });
+
+    testWidgets('arama yapilinca sorgu gecmise kaydedilir', (tester) async {
+      final history = _FakeHistoryStore();
+      await tester.pumpWithL10n(
+        SearchScreen(
+          store: _completeStore,
+          searchFn: _fakeSearch,
+          historyStore: history,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _enterQueryAndSearch(tester, 'yeni arama');
+
+      expect(history.recent, ['yeni arama']);
+    });
+
+    testWidgets('kaydet dugmesi sorguyu kayitli aramalara ekler', (
+      tester,
+    ) async {
+      final history = _FakeHistoryStore();
+      await tester.pumpWithL10n(
+        SearchScreen(
+          store: _completeStore,
+          searchFn: _fakeSearch,
+          historyStore: history,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'sabit arama');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.bookmark_add_outlined));
+      await tester.pumpAndSettle();
+
+      expect(history.saved, ['sabit arama']);
+      // Kayitli bolum gorunur olur (kayittan once panel hic yoktu) ve
+      // kaldirma dugmesi odaklanabilir.
+      expect(find.text('Kayıtlı aramalar'), findsOneWidget);
+      expect(find.byTooltip('Kayıtlı aramayı kaldır'), findsOneWidget);
+    });
+
+    testWidgets('kayitli arama kaldirilir, son aramalar temizlenir', (
+      tester,
+    ) async {
+      final history = _FakeHistoryStore()
+        ..recent = ['r1', 'r2']
+        ..saved = ['kayitli'];
+      await tester.pumpWithL10n(
+        SearchScreen(
+          store: _completeStore,
+          searchFn: _fakeSearch,
+          historyStore: history,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Kayitliyi kaldir.
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      expect(history.saved, isEmpty);
+      expect(find.text('kayitli'), findsNothing);
+
+      // Son aramalari temizle.
+      expect(find.byTooltip('Son aramaları temizle'), findsOneWidget);
+      await tester.tap(find.byTooltip('Son aramaları temizle'));
+      await tester.pumpAndSettle();
+      expect(history.recent, isEmpty);
+      expect(find.text('r1'), findsNothing);
+      // Her iki liste bos: klasik ipucu gorunumuna donulur.
+      expect(
+        find.text("Indexer'ınızda aramak için bir sürüm adı yazın."),
+        findsOneWidget,
+      );
     });
   });
 }

@@ -315,5 +315,10 @@
   "settingsOsApiKeyLabel": "OpenSubtitles API anahtarı",
   "settingsOsUsernameLabel": "Kullanıcı adı (isteğe bağlı)",
   "settingsOsPasswordLabel": "Parola (isteğe bağlı)",
-  "settingsOsSaveLabel": "Altyazı ayarlarını kaydet"
+  "settingsOsSaveLabel": "Altyazı ayarlarını kaydet",
+  "saveSearchTooltip": "Aramayı kaydet",
+  "removeSavedSearchTooltip": "Kayıtlı aramayı kaldır",
+  "searchClearRecentTooltip": "Son aramaları temizle",
+  "searchRecentTitle": "Son aramalar",
+  "searchSavedTitle": "Kayıtlı aramalar"
 }

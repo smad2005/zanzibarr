@@ -1831,6 +1831,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save subtitle settings'**
   String get settingsOsSaveLabel;
+
+  /// No description provided for @saveSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Save search'**
+  String get saveSearchTooltip;
+
+  /// No description provided for @removeSavedSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove saved search'**
+  String get removeSavedSearchTooltip;
+
+  /// No description provided for @searchClearRecentTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear recent searches'**
+  String get searchClearRecentTooltip;
+
+  /// No description provided for @searchRecentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent searches'**
+  String get searchRecentTitle;
+
+  /// No description provided for @searchSavedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved searches'**
+  String get searchSavedTitle;
 }
 
 class _AppLocalizationsDelegate

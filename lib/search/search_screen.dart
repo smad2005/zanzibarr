@@ -14,6 +14,7 @@ import '../src/rust/api/health.dart' show NzbHealthDto, checkNzbHealth;
 import '../src/rust/api/search.dart';
 import '../src/rust/api/streaming.dart' show ProviderConfigDto;
 import '../tv_focus.dart';
+import 'search_history.dart';
 
 /// Arama sonucunun geldiği kaynak (motor tarafıyla aynı sabitler).
 const kSearchSourceIndexer = 'indexer';
@@ -66,6 +67,7 @@ class SearchScreen extends StatefulWidget {
     this.uiPreferences,
     this.providerStore,
     this.healthFn,
+    this.historyStore,
   });
 
   /// Testlerde sahte depo enjekte edebilmek için; null ise gerçek depo kullanılır.
@@ -96,6 +98,9 @@ class SearchScreen extends StatefulWidget {
   /// Null ise FRB `checkNzbHealth` kullanılır.
   final NzbHealthFn? healthFn;
 
+  /// Son/kayıtlı aramalar için; null ise gerçek depo kullanılır.
+  final SearchHistoryStore? historyStore;
+
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
@@ -113,6 +118,8 @@ class _SearchScreenState extends State<SearchScreen> {
   late final EasynewsDownloadFn _easynewsDownloadFn =
       widget.easynewsDownloadFn ?? _defaultEasynewsDownload;
   late final NzbHealthFn _healthFn = widget.healthFn ?? _defaultHealth;
+  late final SearchHistoryStore _historyStore =
+      widget.historyStore ?? SearchHistoryStore();
 
   final _queryController = TextEditingController();
 
@@ -136,6 +143,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// Şu an NZB'si indirilen öğenin listedeki sırası; spinner burada gösterilir.
   int? _busyIndex;
+
+  /// Arama geçmişi ve kayıtlı aramalar (roadmap #9). Öntanımlı olarak boş;
+  /// depo yüklenince tek seferlik doldurulur.
+  List<String> _recentQueries = const [];
+  List<String> _savedQueries = const [];
 
   /// Sonuçlar gelince odak ilk karta taşınır; TV kumandası kullanıcısı
   /// IME'den çıkınca doğrudan listeyi dolaşmaya başlar (issue #4).
@@ -228,6 +240,26 @@ class _SearchScreenState extends State<SearchScreen> {
     // Temizle düğmesi yalnızca metin varken görünsün.
     _queryController.addListener(() => setState(() {}));
     _loadSettings();
+    _loadHistory();
+  }
+
+  /// Geçmiş/kayıtlı aramaları depodan çizer. Secure storage test ortamında
+  /// tamamlanmayabilir (sağlayıcı ayarları gibi); kısa zaman aşımı sessiz
+  /// düşüş sağlar ve ekran boş listelerle açılır.
+  Future<void> _loadHistory() async {
+    try {
+      final results = await Future.wait([
+        _historyStore.loadRecent(),
+        _historyStore.loadSaved(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _recentQueries = results[0];
+        _savedQueries = results[1];
+      });
+    } catch (_) {
+      // Depo okunamazsa geçmiş sessizce boş kalır.
+    }
   }
 
   @override
@@ -291,6 +323,8 @@ class _SearchScreenState extends State<SearchScreen> {
         offset: 0,
       );
       if (!mounted) return;
+      // Aramayı geçmişe kaydet (aynı sorgu en öne taşınır).
+      unawaited(_historyStore.recordSearch(query));
       // Yeni sonuç kümesi: eski ön kontrol durumları ve indirilmiş NZB
       // yolları geçersiz; tarama yeni kuşakla başlar.
       _healthGeneration++;
@@ -425,6 +459,50 @@ class _SearchScreenState extends State<SearchScreen> {
     await _loadSettings();
   }
 
+  /// Çipten tetiklenen arama: sorgu alana yazılır ve doğrudan aranır.
+  Future<void> _runQuery(String query) async {
+    if (_searching) return;
+    _queryController.text = query;
+    _queryController.selection = TextSelection.collapsed(
+      offset: query.length,
+    );
+    await _search();
+  }
+
+  Future<void> _saveCurrentSearch() async {
+    final query = _queryController.text.trim();
+    if (query.isEmpty) return;
+    try {
+      await _historyStore.saveSearch(query);
+      final saved = await _historyStore.loadSaved();
+      if (!mounted) return;
+      setState(() => _savedQueries = saved);
+    } catch (_) {
+      // Kayıt başarısızsa sessiz kalınır; arama akışı etkilenmez.
+    }
+  }
+
+  Future<void> _removeSavedSearch(String query) async {
+    try {
+      await _historyStore.removeSaved(query);
+      final saved = await _historyStore.loadSaved();
+      if (!mounted) return;
+      setState(() => _savedQueries = saved);
+    } catch (_) {
+      // Aynı şekilde sessiz.
+    }
+  }
+
+  Future<void> _clearRecentSearches() async {
+    try {
+      await _historyStore.clearRecent();
+      if (!mounted) return;
+      setState(() => _recentQueries = const []);
+    } catch (_) {
+      // Sessiz.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -485,6 +563,18 @@ class _SearchScreenState extends State<SearchScreen> {
                   onPressed: _searching ? null : _search,
                   icon: const Icon(Icons.search_rounded, size: 20),
                 ),
+                // Kaydet düğmesi yalnızca yazılan sorgu varken görünür.
+                if (_queryController.text.trim().isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  IconButton(
+                    tooltip: l10n.saveSearchTooltip,
+                    onPressed: _saveCurrentSearch,
+                    icon: const Icon(
+                      Icons.bookmark_add_outlined,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -536,6 +626,17 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     final items = _items;
     if (items == null) {
+      // Henüz arama yapılmadı: geçmiş/kayıtlı aramalar varsa çip paneli,
+      // yoksa klasik ipucu görünümü gösterilir.
+      if (_recentQueries.isNotEmpty || _savedQueries.isNotEmpty) {
+        return _HistoryPanel(
+          recent: _recentQueries,
+          saved: _savedQueries,
+          onRunQuery: (query) => unawaited(_runQuery(query)),
+          onRemoveSaved: (query) => unawaited(_removeSavedSearch(query)),
+          onClearRecent: () => unawaited(_clearRecentSearches()),
+        );
+      }
       return _HintView(
         icon: Icons.travel_explore_rounded,
         message: l10n.searchEmptyHint,
@@ -1007,8 +1108,7 @@ class _SearchError extends StatelessWidget {
 }
 
 /// Boş durum ipucu görünümü (henüz arama yapılmadı / sonuç yok).
-class _HintView extends StatelessWidget {
-  const _HintView({required this.icon, required this.message});
+class _HintView extends StatelessWidget {  const _HintView({required this.icon, required this.message});
 
   final IconData icon;
   final String message;
@@ -1035,6 +1135,198 @@ class _HintView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Son aramalar / kayıtlı aramalar çip paneli (roadmap #9). Arama yapılmadan
+/// önce gösterilir; çipe dokununca sorgu alana yazılıp doğrudan aranır.
+///
+/// TV/D-pad: çipler odaklanabilir; kayıtlı aramanın kaldırma düğmesi çipin
+/// içinde ayrı bir odaklanabilir öğedir.
+class _HistoryPanel extends StatelessWidget {
+  const _HistoryPanel({
+    required this.recent,
+    required this.saved,
+    required this.onRunQuery,
+    required this.onRemoveSaved,
+    required this.onClearRecent,
+  });
+
+  final List<String> recent;
+  final List<String> saved;
+  final ValueChanged<String> onRunQuery;
+  final ValueChanged<String> onRemoveSaved;
+  final VoidCallback onClearRecent;
+
+  Widget _section({
+    required BuildContext context,
+    required String title,
+    required List<String> queries,
+    required ValueChanged<String> onRun,
+    VoidCallback? onClear,
+    ValueChanged<String>? onRemove,
+  }) {
+    final l10n = AppLocalizations.of(context);
+    final foreground = Theme.of(context).colorScheme.onSurface;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: foreground.withValues(alpha: 0.5),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              if (onClear != null)
+                IconButton(
+                  tooltip: l10n.searchClearRecentTooltip,
+                  icon: Icon(
+                    Icons.clear_all_rounded,
+                    size: 18,
+                    color: foreground.withValues(alpha: 0.5),
+                  ),
+                  onPressed: onClear,
+                ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final query in queries)
+                _QueryChip(
+                  label: query,
+                  onTap: () => onRun(query),
+                  onRemove: onRemove == null ? null : () => onRemove(query),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        if (recent.isNotEmpty)
+          _section(
+            context: context,
+            title: l10n.searchRecentTitle,
+            queries: recent,
+            onRun: onRunQuery,
+            onClear: onClearRecent,
+          ),
+        if (saved.isNotEmpty)
+          _section(
+            context: context,
+            title: l10n.searchSavedTitle,
+            queries: saved,
+            onRun: onRunQuery,
+            onRemove: onRemoveSaved,
+          ),
+      ],
+    );
+  }
+}
+
+/// Tek sorgu çipi: gövdeye dokununca arama; [onRemove] verilirse sağda küçük
+/// bir kaldırma düğmesi taşır (yalnız kayıtlı aramalarda).
+class _QueryChip extends StatelessWidget {
+  const _QueryChip({
+    required this.label,
+    required this.onTap,
+    this.onRemove,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = Theme.of(context).colorScheme.onSurface;
+    final accent = Theme.of(context).colorScheme.primary;
+    final bookmarked = onRemove != null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: foreground.withValues(alpha: 0.045),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: foreground.withValues(alpha: 0.09)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(999),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    bookmarked
+                        ? Icons.bookmark_rounded
+                        : Icons.history_rounded,
+                    size: 13,
+                    color: (bookmarked ? accent : foreground)
+                        .withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 240),
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: foreground.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (bookmarked) ...[
+            const SizedBox(width: 2),
+            SizedBox.square(
+              dimension: 26,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                iconSize: 13,
+                tooltip: AppLocalizations.of(
+                  context,
+                ).removeSavedSearchTooltip,
+                icon: Icon(
+                  Icons.close_rounded,
+                  color: foreground.withValues(alpha: 0.5),
+                ),
+                onPressed: onRemove,
+              ),
+            ),
+            const SizedBox(width: 2),
+          ],
+        ],
       ),
     );
   }

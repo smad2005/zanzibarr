@@ -963,4 +963,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsOsSaveLabel => 'Save subtitle settings';
+
+  @override
+  String get saveSearchTooltip => 'Save search';
+
+  @override
+  String get removeSavedSearchTooltip => 'Remove saved search';
+
+  @override
+  String get searchClearRecentTooltip => 'Clear recent searches';
+
+  @override
+  String get searchRecentTitle => 'Recent searches';
+
+  @override
+  String get searchSavedTitle => 'Saved searches';
 }
