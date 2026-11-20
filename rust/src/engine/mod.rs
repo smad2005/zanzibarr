@@ -4,6 +4,7 @@
 //! ayrıca `crate::api` altında tanımlanır.
 
 pub mod archive;
+pub mod health;
 pub mod http;
 pub mod locator;
 pub mod newznab;

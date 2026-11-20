@@ -6,6 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/health.dart';
 import 'api/repair.dart';
 import 'api/search.dart';
 import 'api/simple.dart';
@@ -67,6 +68,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<SearchItemDto> dco_decode_list_search_item_dto(dynamic raw);
+
+  @protected
+  NzbHealthDto dco_decode_nzb_health_dto(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
@@ -175,6 +179,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<SearchItemDto> sse_decode_list_search_item_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  NzbHealthDto sse_decode_nzb_health_dto(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
@@ -307,6 +314,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     List<SearchItemDto> self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_nzb_health_dto(NzbHealthDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);

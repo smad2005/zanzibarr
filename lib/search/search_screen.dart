@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../player/player_screen.dart';
 import '../settings/indexer_settings.dart';
+import '../settings/provider_settings.dart';
 import '../settings/settings_screen.dart';
 import '../settings/ui_preferences.dart';
+import '../src/rust/api/health.dart' show NzbHealthDto, checkNzbHealth;
 import '../src/rust/api/search.dart';
+import '../src/rust/api/streaming.dart' show ProviderConfigDto;
 import '../tv_focus.dart';
 
 /// FRB `newznabSearch` imzası; testlerde sahte enjekte edilebilir.
@@ -26,6 +31,10 @@ typedef NewznabDownloadFn =
       String suggestedName,
     );
 
+/// FRB `checkNzbHealth` imzası; testlerde sahte enjekte edilebilir.
+typedef NzbHealthFn =
+    Future<NzbHealthDto> Function(ProviderConfigDto config, String nzbPath);
+
 /// Newznab indexer'da arama yapıp sonucu NZB indirmeden oynatıcıya bağlayan
 /// ekran.
 ///
@@ -40,6 +49,8 @@ class SearchScreen extends StatefulWidget {
     this.downloadFn,
     this.onDownloaded,
     this.uiPreferences,
+    this.providerStore,
+    this.healthFn,
   });
 
   /// Testlerde sahte depo enjekte edebilmek için; null ise gerçek depo kullanılır.
@@ -59,6 +70,14 @@ class SearchScreen extends StatefulWidget {
   /// autofocus hedefi için gerekli.
   final UiPreferencesController? uiPreferences;
 
+  /// NNTP sağlayıcı ayarları: sağlık ön kontrolü (rozetler) bunu ister.
+  /// Testlerde sahte depo enjekte edilir; null ise gerçek depo okunur ve
+  /// ayarlar eksikse rozetler sessizce gizlenir.
+  final ProviderSettingsStore? providerStore;
+
+  /// Null ise FRB `checkNzbHealth` kullanılır.
+  final NzbHealthFn? healthFn;
+
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
@@ -68,9 +87,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
   late final IndexerSettingsStore _store =
       widget.store ?? IndexerSettingsStore();
+  late final ProviderSettingsStore _providerStore =
+      widget.providerStore ?? ProviderSettingsStore();
   late final NewznabSearchFn _searchFn = widget.searchFn ?? _defaultSearch;
   late final NewznabDownloadFn _downloadFn =
       widget.downloadFn ?? _defaultDownload;
+  late final NzbHealthFn _healthFn = widget.healthFn ?? _defaultHealth;
 
   final _queryController = TextEditingController();
 
@@ -79,6 +101,7 @@ class _SearchScreenState extends State<SearchScreen> {
   late final _queryFocusNode = dpadTraversalFocusNode(_queryController);
 
   IndexerSettings _settings = const IndexerSettings();
+  ProviderSettings _providerSettings = const ProviderSettings();
   bool _loadingSettings = true;
 
   List<SearchItemDto>? _items;
@@ -93,12 +116,29 @@ class _SearchScreenState extends State<SearchScreen> {
   /// IME'den çıkınca doğrudan listeyi dolaşmaya başlar (issue #4).
   final _firstResultFocusNode = FocusNode();
 
+  // ---- NZB sağlık ön kontrolü (rozetler) -----------------------------------
+  /// Gecikmiş eski tarama adımlarının yeni sonuçlara yazmasını önlemek
+  /// için tarama kuşağı: yeni arama/temizleme bunu artırır.
+  int _healthGeneration = 0;
+
+  /// indeks → ön kontrol durumu (null = sırası gelmedi).
+  final Map<int, _HealthState> _healthStates = {};
+
+  /// Denetim sırasında indirilmiş NZB yolları: kullanıcı "oynat" derse
+  /// aynı küçük dosya yeniden indirilmez.
+  final Map<int, String> _downloadedPaths = {};
+
   static Future<SearchPageDto> _defaultSearch(
     IndexerConfigDto config,
     String query,
     int limit,
     int offset,
   ) => newznabSearch(config: config, query: query, limit: limit, offset: offset);
+
+  static Future<NzbHealthDto> _defaultHealth(
+    ProviderConfigDto config,
+    String nzbPath,
+  ) => checkNzbHealth(config: config, nzbPath: nzbPath);
 
   static Future<String> _defaultDownload(
     IndexerConfigDto config,
@@ -134,19 +174,30 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _loadSettings() async {
+    IndexerSettings indexer = const IndexerSettings();
+    ProviderSettings provider = const ProviderSettings();
     try {
-      final settings = await _store.load();
-      if (!mounted) return;
-      setState(() {
-        _settings = settings;
-        _loadingSettings = false;
-      });
+      indexer = await _store.load();
     } catch (_) {
       // Secure storage okunamazsa indexer yokmuş gibi davran; kullanıcı
       // ayarlardan yeniden girmeyi deneyebilir.
-      if (!mounted) return;
-      setState(() => _loadingSettings = false);
     }
+    try {
+      // Sağlayıcı ayarları yalnız ön kontrol rozetleri için gereklidir;
+      // depo beklenmedik biçimde yanıt vermezse (ör. test ortamı) arama
+      // ve oynatma akışı ezilmesin diye kısa bir zaman aşımı koruması var.
+      provider = await _providerStore
+          .load()
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Sağlayıcı ayarı okunamazsa ön kontrol sessizce kapalı kalır.
+    }
+    if (!mounted) return;
+    setState(() {
+      _settings = indexer;
+      _providerSettings = provider;
+      _loadingSettings = false;
+    });
   }
 
   IndexerConfigDto get _config => IndexerConfigDto(
@@ -164,6 +215,11 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final page = await _searchFn(_config, query, _pageSize, 0);
       if (!mounted) return;
+      // Yeni sonuç kümesi: eski ön kontrol durumları ve indirilmiş NZB
+      // yolları geçersiz; tarama yeni kuşakla başlar.
+      _healthGeneration++;
+      _healthStates.clear();
+      _downloadedPaths.clear();
       setState(() {
         _items = page.items;
         _total = page.total?.toInt();
@@ -176,6 +232,7 @@ class _SearchScreenState extends State<SearchScreen> {
           if (mounted) _firstResultFocusNode.requestFocus();
         });
       }
+      unawaited(_startHealthSweep(_healthGeneration));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -185,13 +242,69 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
+  /// Sonuç listesindeki NZB'leri sırayla ön kontrolden geçirir (kullanıcı
+  /// daha oynat tuşuna basmadan).
+  ///
+  /// Davranış sınırları:
+  /// - Sağlayıcı ayarları eksikse hiç başlamaz (rozetler gizli kalır).
+  /// - Her öğe için NZB küçük olduğundan bir kez indirilir ve yol
+  ///   [`_downloadedPaths`]te saklanır; oynatmada yeniden indirilmez.
+  /// - Üst üste iki hata (indirme/sunucu erişimi) taramayı keser;
+  ///   kalan kartlarda rozet çıkmaz.
+  /// - Yeni arama/temizleme kuşağı geçersiz kılarsa bekleyen adımlar
+  ///   sonuç uygulamaz.
+  Future<void> _startHealthSweep(int generation) async {
+    final items = _items;
+    if (items == null || items.isEmpty) return;
+    if (!_providerSettings.isComplete) return;
+    final providerConfig = ProviderConfigDto(
+      host: _providerSettings.host,
+      port: _providerSettings.port,
+      username: _providerSettings.username,
+      password: _providerSettings.password,
+      maxConnections: _providerSettings.maxConnections,
+    );
+    var consecutiveFailures = 0;
+    for (var index = 0; index < items.length; index++) {
+      if (!mounted || generation != _healthGeneration) return;
+      if (_healthStates[index] is _HealthDone ||
+          _healthStates[index] is _HealthFailed) {
+        continue;
+      }
+      final item = items[index];
+      setState(() => _healthStates[index] = _HealthChecking());
+      try {
+        // Denetim küçük NZB indirerek yapılır; aynı dosya oynatmada da
+        // kullanılır (yeniden indirme yok).
+        var path = _downloadedPaths[index];
+        if (path == null) {
+          path = await _downloadFn(_config, item.nzbUrl, item.title);
+          if (!mounted || generation != _healthGeneration) return;
+          _downloadedPaths[index] = path;
+        }
+        final report = await _healthFn(providerConfig, path);
+        if (!mounted || generation != _healthGeneration) return;
+        setState(() => _healthStates[index] = _HealthDone(report));
+        consecutiveFailures = 0;
+      } catch (_) {
+        if (!mounted || generation != _healthGeneration) return;
+        setState(() => _healthStates[index] = _HealthFailed());
+        consecutiveFailures++;
+        if (consecutiveFailures >= 2) return;
+      }
+    }
+  }
+
   Future<void> _downloadAndPlay(int index) async {
     if (_busyIndex != null) return;
     final item = _items![index];
     setState(() => _busyIndex = index);
     try {
-      final path = await _downloadFn(_config, item.nzbUrl, item.title);
+      // Ön kontrol aynı NZB'yi zaten indirdiyse yol yeniden kullanılır.
+      final path = _downloadedPaths[index] ??
+          await _downloadFn(_config, item.nzbUrl, item.title);
       if (!mounted) return;
+      _downloadedPaths[index] = path;
       final onDownloaded = widget.onDownloaded;
       if (onDownloaded != null) {
         onDownloaded(path);
@@ -264,6 +377,10 @@ class _SearchScreenState extends State<SearchScreen> {
                               icon: const Icon(Icons.close_rounded, size: 18),
                               onPressed: () {
                                 _queryController.clear();
+                                // Bekleyen ön kontrol adımları geçersiz.
+                                _healthGeneration++;
+                                _healthStates.clear();
+                                _downloadedPaths.clear();
                                 setState(() {
                                   _items = null;
                                   _total = null;
@@ -348,6 +465,7 @@ class _SearchScreenState extends State<SearchScreen> {
         item: items[index],
         busy: _busyIndex == index,
         enabled: _busyIndex == null,
+        health: _healthStates[index],
         focusNode: index == 0 ? _firstResultFocusNode : null,
         onTap: () => _downloadAndPlay(index),
       ),
@@ -355,13 +473,34 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
+/// Arama sonucu başına ön kontrol durumu.
+sealed class _HealthState {}
+
+/// NZB denetleniyor (rozet yeri küçük bir spinner taşır).
+class _HealthChecking extends _HealthState {}
+
+/// Denetim bitti; rozet raporuyla çizilir.
+class _HealthDone extends _HealthState {
+  _HealthDone(this.report);
+
+  final NzbHealthDto report;
+}
+
+/// Denetim başarısız; bu kartta rozet gösterilmez.
+class _HealthFailed extends _HealthState {}
+
 /// Tek arama sonucu kartı: tür simgesi, başlık, rozetler ve sağda boyut/yaş.
+///
+/// [health] null ise ön kontrol rozeti çizilmez (sıra gelmedi ya da
+/// sağlayıcı ayarı eksik); [_HealthChecking] küçük bir spinner gösterir;
+/// [_HealthDone] renkli rozeti basar.
 class _SearchResultCard extends StatefulWidget {
   const _SearchResultCard({
     required this.item,
     required this.busy,
     required this.enabled,
     required this.onTap,
+    this.health,
     this.focusNode,
   });
 
@@ -369,6 +508,9 @@ class _SearchResultCard extends StatefulWidget {
   final bool busy;
   final bool enabled;
   final VoidCallback onTap;
+
+  /// Bu sonucun ön kontrol durumu; null = rozet yok.
+  final _HealthState? health;
 
   /// İlk sonuç kartında kullanılır: arama bitince odak buraya taşınır.
   final FocusNode? focusNode;
@@ -385,6 +527,95 @@ class _SearchResultCardState extends State<_SearchResultCard> {
     'tv' => Icons.tv_rounded,
     _ => Icons.insert_drive_file_outlined,
   };
+
+  /// Ön kontrol rozetinin rengi/simgesi. Durum dizgileri Rust'ın
+  /// `HealthStatus::as_str` değerleridir.
+  static (Color, IconData, String) _healthVisual(
+    NzbHealthDto report,
+    AppLocalizations l10n,
+  ) => switch (report.status) {
+    'good' => (
+      const Color(0xFF34A853),
+      Icons.check_circle_outline_rounded,
+      l10n.searchHealthGood,
+    ),
+    'repairable' => (
+      const Color(0xFFB88A00),
+      Icons.healing_rounded,
+      l10n.searchHealthRepairable,
+    ),
+    'risky' => (
+      const Color(0xFFDD7A1B),
+      Icons.warning_amber_outlined,
+      l10n.searchHealthRisky,
+    ),
+    _ => (
+      const Color(0xFFDA3A2C),
+      Icons.error_outline_rounded,
+      l10n.searchHealthMissing,
+    ),
+  };
+
+  /// Rozetin uzun basılabilir açıklaması: örnekleme, cilt ve PAR2 özeti.
+  static String _healthTooltip(NzbHealthDto report, AppLocalizations l10n) {
+    final lines = [
+      l10n.searchHealthSampled(
+        report.missingArticles,
+        report.sampledArticles,
+      ),
+      if (report.volumeGaps > 0) l10n.searchHealthMissingVolumes,
+      if (report.par2Present)
+        l10n.searchHealthPar2Blocks(report.par2RecoveryBlocks)
+      else if (report.status != 'good')
+        l10n.searchHealthNoPar2,
+    ];
+    return lines.join('\n');
+  }
+
+  /// Renkli ön kontrol rozeti; rozet satırının ilk öğesidir.
+  Widget _healthChip(BuildContext context, NzbHealthDto report) {
+    final l10n = AppLocalizations.of(context);
+    final (color, icon, label) = _healthVisual(report, l10n);
+    return Tooltip(
+      message: _healthTooltip(report, l10n),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Ön kontrol sürerken gösterilen minik spinner (etiketsiz).
+  Widget _healthPendingChip(BuildContext context) {
+    final foreground = Theme.of(context).colorScheme.onSurface;
+    return SizedBox.square(
+      dimension: 14,
+      child: CircularProgressIndicator(
+        strokeWidth: 1.6,
+        color: foreground.withValues(alpha: 0.45),
+      ),
+    );
+  }
 
   /// GB/MB biçiminde boyut; `null` ise boş döner (gösterilmez).
   static String _formatSize(BigInt sizeBytes) {
@@ -477,12 +708,21 @@ class _SearchResultCardState extends State<_SearchResultCard> {
                         height: 1.25,
                       ),
                     ),
-                    if (item.badges.isNotEmpty) ...[
+                    if (item.badges.isNotEmpty ||
+                        widget.health != null) ...[
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 5,
                         runSpacing: 4,
                         children: [
+                          switch (widget.health) {
+                            _HealthDone(:final report) => _healthChip(
+                              context,
+                              report,
+                            ),
+                            _HealthChecking() => _healthPendingChip(context),
+                            _ => const SizedBox.shrink(),
+                          },
                           for (final badge in item.badges)
                             Container(
                               padding: const EdgeInsets.symmetric(

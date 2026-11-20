@@ -110,6 +110,28 @@ impl<S: AsyncRead + AsyncWrite + Unpin> NntpConnection<S> {
         }
     }
 
+    /// `STAT <message-id>`: article'ın sunucuda bulunup bulunmadığını
+    /// gövde İNDİRMEDEN sorgular (RFC 3977 §8.2). Sağlık ön kontrolünün
+    /// temel taşıdır — ağdan yalnız tek durum satırı döner.
+    ///
+    /// Dönen değer: `true` = article mevcut (223), `false` = bu kimlikte
+    /// article yok (430 article-id yok / 423 article numarası yok).
+    pub async fn stat_by_message_id(&mut self, message_id: &str) -> Result<bool, NntpError> {
+        let id = message_id
+            .trim()
+            .trim_start_matches('<')
+            .trim_end_matches('>');
+        if id.is_empty() || id.contains(['\r', '\n', '<', '>']) {
+            return Err(NntpError::InvalidArgument("invalid message-ID".into()));
+        }
+        let resp = self.command(&format!("STAT <{id}>")).await?;
+        match resp.code {
+            223 => Ok(true),
+            430 | 423 => Ok(false),
+            code => Err(unexpected_response("STAT", code, resp.text)),
+        }
+    }
+
     /// Nazik kapanış; yanıt beklenir ama hatası önemsenmez.
     pub async fn quit(mut self) -> Result<(), NntpError> {
         let _ = self.command("QUIT").await;
@@ -468,5 +490,69 @@ mod tests {
         let mut conn = NntpConnection::handshake(client).await.unwrap();
         assert_eq!(conn.date().await.unwrap(), "20260716120000");
         task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn stat_mevcut_article_true_doner() {
+        let (client, server) = duplex(4096);
+        let task = mock_server(
+            server,
+            "200 hazir\r\n",
+            vec![(
+                "STAT <seg-1@news.example.com>\r\n",
+                "223 42 <seg-1@news.example.com> article exists\r\n",
+            )],
+        );
+        let mut conn = NntpConnection::handshake(client).await.unwrap();
+        assert!(conn
+            .stat_by_message_id("seg-1@news.example.com")
+            .await
+            .unwrap());
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn stat_eksik_article_false_doner() {
+        // 430 (article-id yok) ve 423 (article numarası yok) aynı şekilde
+        // "sunucuda değil" demektir; akış kesilmez.
+        for reply in [
+            "430 boyle bir article yok\r\n",
+            "423 boyle bir article yok\r\n",
+        ] {
+            let (client, server) = duplex(4096);
+            let task = mock_server(
+                server,
+                "200 hazir\r\n",
+                vec![("STAT <yok@news.example.com>\r\n", reply)],
+            );
+            let mut conn = NntpConnection::handshake(client).await.unwrap();
+            assert!(!conn
+                .stat_by_message_id("yok@news.example.com")
+                .await
+                .unwrap());
+            task.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn stat_gecersiz_message_id_ve_ayrac_normalizasyonu() {
+        let (client, server) = duplex(4096);
+        let task = mock_server(server, "200 hazir\r\n", vec![]);
+        let mut conn = NntpConnection::handshake(client).await.unwrap();
+        assert!(matches!(
+            conn.stat_by_message_id("<kotu\r\n@id>").await,
+            Err(NntpError::InvalidArgument(_))
+        ));
+        // Ayraçlı NZB girdisi tek çift ayraca normalize edilir.
+        let (client2, server2) = duplex(4096);
+        let task2 = mock_server(
+            server2,
+            "200 hazir\r\n",
+            vec![("STAT <a@b>\r\n", "223 0 <a@b>\r\n")],
+        );
+        let mut conn2 = NntpConnection::handshake(client2).await.unwrap();
+        assert!(conn2.stat_by_message_id("<a@b>").await.unwrap());
+        task.await.unwrap();
+        task2.await.unwrap();
     }
 }

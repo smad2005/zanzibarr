@@ -859,4 +859,53 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get rssRemoveFavorite => 'Remove from favorites';
+
+  @override
+  String get upNextTitle => 'Up next';
+
+  @override
+  String upNextStarting(Object seconds) {
+    return 'Starting in ${seconds}s';
+  }
+
+  @override
+  String get upNextPlayNow => 'Play now';
+
+  @override
+  String get upNextFinish => 'Finish episode';
+
+  @override
+  String get upNextClearQueue => 'Clear queue';
+
+  @override
+  String get entryWatchedTooltip => 'Watched';
+
+  @override
+  String get searchHealthGood => 'Good';
+
+  @override
+  String get searchHealthRepairable => 'Repairable';
+
+  @override
+  String get searchHealthRisky => 'Risky';
+
+  @override
+  String get searchHealthMissing => 'Incomplete';
+
+  @override
+  String searchHealthSampled(int missing, int sampled) {
+    return '$missing of $sampled sampled articles missing';
+  }
+
+  @override
+  String searchHealthPar2Blocks(int count) {
+    return '$count PAR2 recovery blocks available';
+  }
+
+  @override
+  String get searchHealthNoPar2 => 'No PAR2 repair data in this post';
+
+  @override
+  String get searchHealthMissingVolumes =>
+      'Some archive volumes are missing from the NZB';
 }

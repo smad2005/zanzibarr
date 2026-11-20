@@ -268,5 +268,30 @@
   "rssFavorites": "Favoriler",
   "rssAddFavorite": "Favorilere ekle",
   "rssRemoveFavorite": "Favorilerden çıkar",
-  "episodeSwitch": "Bölüm değiştir"
+  "episodeSwitch": "Bölüm değiştir",
+  "upNextTitle": "Sıradaki bölüm",
+  "upNextStarting": "{seconds} sn içinde başlıyor",
+  "upNextPlayNow": "Şimdi oynat",
+  "upNextFinish": "Bölümü bitir",
+  "upNextClearQueue": "Kuyruğu temizle",
+  "entryWatchedTooltip": "İzlendi",
+  "searchHealthGood": "İyi",
+  "searchHealthRepairable": "Onarılabilir",
+  "searchHealthRisky": "Riskli",
+  "searchHealthMissing": "Eksik",
+  "searchHealthSampled": "{sampled} örneklem article'dan {missing} tanesi eksik",
+"@searchHealthSampled": {
+    "placeholders": {
+      "missing": { "type": "int" },
+      "sampled": { "type": "int" }
+    }
+  },
+  "searchHealthPar2Blocks": "{count} PAR2 onarım bloğu mevcut",
+"@searchHealthPar2Blocks": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "searchHealthNoPar2": "Bu yayında PAR2 onarım verisi yok",
+  "searchHealthMissingVolumes": "NZB listesinde bazı arşiv ciltleri eksik"
 }

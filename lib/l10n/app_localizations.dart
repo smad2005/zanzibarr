@@ -1645,6 +1645,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove from favorites'**
   String get rssRemoveFavorite;
+
+  /// No description provided for @upNextTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Up next'**
+  String get upNextTitle;
+
+  /// No description provided for @upNextStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting in {seconds}s'**
+  String upNextStarting(Object seconds);
+
+  /// No description provided for @upNextPlayNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Play now'**
+  String get upNextPlayNow;
+
+  /// No description provided for @upNextFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish episode'**
+  String get upNextFinish;
+
+  /// No description provided for @upNextClearQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear queue'**
+  String get upNextClearQueue;
+
+  /// No description provided for @entryWatchedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Watched'**
+  String get entryWatchedTooltip;
+
+  /// No description provided for @searchHealthGood.
+  ///
+  /// In en, this message translates to:
+  /// **'Good'**
+  String get searchHealthGood;
+
+  /// No description provided for @searchHealthRepairable.
+  ///
+  /// In en, this message translates to:
+  /// **'Repairable'**
+  String get searchHealthRepairable;
+
+  /// No description provided for @searchHealthRisky.
+  ///
+  /// In en, this message translates to:
+  /// **'Risky'**
+  String get searchHealthRisky;
+
+  /// No description provided for @searchHealthMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Incomplete'**
+  String get searchHealthMissing;
+
+  /// No description provided for @searchHealthSampled.
+  ///
+  /// In en, this message translates to:
+  /// **'{missing} of {sampled} sampled articles missing'**
+  String searchHealthSampled(int missing, int sampled);
+
+  /// No description provided for @searchHealthPar2Blocks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} PAR2 recovery blocks available'**
+  String searchHealthPar2Blocks(int count);
+
+  /// No description provided for @searchHealthNoPar2.
+  ///
+  /// In en, this message translates to:
+  /// **'No PAR2 repair data in this post'**
+  String get searchHealthNoPar2;
+
+  /// No description provided for @searchHealthMissingVolumes.
+  ///
+  /// In en, this message translates to:
+  /// **'Some archive volumes are missing from the NZB'**
+  String get searchHealthMissingVolumes;
 }
 
 class _AppLocalizationsDelegate

@@ -224,6 +224,41 @@ fn wire__crate__api__repair__cancel_repair_impl(
         },
     )
 }
+fn wire__crate__api__health__check_nzb_health_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "check_nzb_health",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_config =
+                <crate::api::streaming::ProviderConfigDto>::sse_decode(&mut deserializer);
+            let api_nzb_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::health::check_nzb_health(api_config, api_nzb_path)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__simple__engine_info_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -718,6 +753,38 @@ impl SseDecode for Vec<crate::api::search::SearchItemDto> {
     }
 }
 
+impl SseDecode for crate::api::health::NzbHealthDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_status = <String>::sse_decode(deserializer);
+        let mut var_sampledArticles = <u32>::sse_decode(deserializer);
+        let mut var_missingArticles = <u32>::sse_decode(deserializer);
+        let mut var_erroredSamples = <u32>::sse_decode(deserializer);
+        let mut var_estimatedMissingArticles = <u64>::sse_decode(deserializer);
+        let mut var_targetArticleCount = <u64>::sse_decode(deserializer);
+        let mut var_targetFileCount = <u32>::sse_decode(deserializer);
+        let mut var_archiveVolumes = <u32>::sse_decode(deserializer);
+        let mut var_volumeGaps = <u32>::sse_decode(deserializer);
+        let mut var_headMissing = <bool>::sse_decode(deserializer);
+        let mut var_par2Present = <bool>::sse_decode(deserializer);
+        let mut var_par2RecoveryBlocks = <u32>::sse_decode(deserializer);
+        return crate::api::health::NzbHealthDto {
+            status: var_status,
+            sampled_articles: var_sampledArticles,
+            missing_articles: var_missingArticles,
+            errored_samples: var_erroredSamples,
+            estimated_missing_articles: var_estimatedMissingArticles,
+            target_article_count: var_targetArticleCount,
+            target_file_count: var_targetFileCount,
+            archive_volumes: var_archiveVolumes,
+            volume_gaps: var_volumeGaps,
+            head_missing: var_headMissing,
+            par2_present: var_par2Present,
+            par2_recovery_blocks: var_par2RecoveryBlocks,
+        };
+    }
+}
+
 impl SseDecode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -965,27 +1032,28 @@ fn pde_ffi_dispatcher_primary_impl(
         3 => wire__crate__api__repair__begin_repair_impl(port, ptr, rust_vec_len, data_len),
         4 => wire__crate__api__streaming__begin_stream_impl(port, ptr, rust_vec_len, data_len),
         5 => wire__crate__api__repair__cancel_repair_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__streaming__list_archive_entries_impl(
+        6 => wire__crate__api__health__check_nzb_health_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__streaming__list_archive_entries_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        10 => wire__crate__api__streaming__list_playable_entries_impl(
+        11 => wire__crate__api__streaming__list_playable_entries_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__api__search__newznab_check_caps_impl(port, ptr, rust_vec_len, data_len),
-        12 => {
+        12 => wire__crate__api__search__newznab_check_caps_impl(port, ptr, rust_vec_len, data_len),
+        13 => {
             wire__crate__api__search__newznab_download_nzb_impl(port, ptr, rust_vec_len, data_len)
         }
-        13 => wire__crate__api__search__newznab_search_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__repair__repair_progress_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__streaming__start_stream_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__streaming__stop_stream_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__search__newznab_search_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__repair__repair_progress_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__streaming__start_stream_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__streaming__stop_stream_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -998,8 +1066,8 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        6 => wire__crate__api__simple__engine_info_impl(ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__simple__engine_info_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1047,6 +1115,37 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::search::IndexerConfigDto>
     for crate::api::search::IndexerConfigDto
 {
     fn into_into_dart(self) -> crate::api::search::IndexerConfigDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::health::NzbHealthDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.status.into_into_dart().into_dart(),
+            self.sampled_articles.into_into_dart().into_dart(),
+            self.missing_articles.into_into_dart().into_dart(),
+            self.errored_samples.into_into_dart().into_dart(),
+            self.estimated_missing_articles.into_into_dart().into_dart(),
+            self.target_article_count.into_into_dart().into_dart(),
+            self.target_file_count.into_into_dart().into_dart(),
+            self.archive_volumes.into_into_dart().into_dart(),
+            self.volume_gaps.into_into_dart().into_dart(),
+            self.head_missing.into_into_dart().into_dart(),
+            self.par2_present.into_into_dart().into_dart(),
+            self.par2_recovery_blocks.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::health::NzbHealthDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::health::NzbHealthDto>
+    for crate::api::health::NzbHealthDto
+{
+    fn into_into_dart(self) -> crate::api::health::NzbHealthDto {
         self
     }
 }
@@ -1300,6 +1399,24 @@ impl SseEncode for Vec<crate::api::search::SearchItemDto> {
         for item in self {
             <crate::api::search::SearchItemDto>::sse_encode(item, serializer);
         }
+    }
+}
+
+impl SseEncode for crate::api::health::NzbHealthDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.status, serializer);
+        <u32>::sse_encode(self.sampled_articles, serializer);
+        <u32>::sse_encode(self.missing_articles, serializer);
+        <u32>::sse_encode(self.errored_samples, serializer);
+        <u64>::sse_encode(self.estimated_missing_articles, serializer);
+        <u64>::sse_encode(self.target_article_count, serializer);
+        <u32>::sse_encode(self.target_file_count, serializer);
+        <u32>::sse_encode(self.archive_volumes, serializer);
+        <u32>::sse_encode(self.volume_gaps, serializer);
+        <bool>::sse_encode(self.head_missing, serializer);
+        <bool>::sse_encode(self.par2_present, serializer);
+        <u32>::sse_encode(self.par2_recovery_blocks, serializer);
     }
 }
 

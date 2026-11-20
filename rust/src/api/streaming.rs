@@ -711,7 +711,8 @@ fn open_nzb_file(nzb_path: &str) -> Result<std::fs::File, String> {
 
 /// Oturumsuz NZB okuma + ayrıştırma: seçici listeleme anlık bittiği için
 /// iptal kanalı taşımaz; güvenlik denetimleri oturumlu yolla aynıdır.
-fn read_nzb(nzb_path: &str) -> Result<nzb::Nzb, String> {
+/// FRB ön kontrol API'si (`api::health`) de aynı okuyucuyu paylaşır.
+pub(crate) fn read_nzb(nzb_path: &str) -> Result<nzb::Nzb, String> {
     let mut file = open_nzb_file(nzb_path)?;
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)

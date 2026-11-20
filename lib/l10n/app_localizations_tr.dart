@@ -869,4 +869,53 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get rssRemoveFavorite => 'Favorilerden çıkar';
+
+  @override
+  String get upNextTitle => 'S─▒radaki b├╢l├╝m';
+
+  @override
+  String upNextStarting(Object seconds) {
+    return '$seconds sn i├зinde ba┼Яl─▒yor';
+  }
+
+  @override
+  String get upNextPlayNow => '┼Юimdi oynat';
+
+  @override
+  String get upNextFinish => 'B├╢l├╝m├╝ bitir';
+
+  @override
+  String get upNextClearQueue => 'Kuyru─Яu temizle';
+
+  @override
+  String get entryWatchedTooltip => 'İzlendi';
+
+  @override
+  String get searchHealthGood => 'İyi';
+
+  @override
+  String get searchHealthRepairable => 'Onarılabilir';
+
+  @override
+  String get searchHealthRisky => 'Riskli';
+
+  @override
+  String get searchHealthMissing => 'Eksik';
+
+  @override
+  String searchHealthSampled(int missing, int sampled) {
+    return '$sampled örneklem article\'dan $missing tanesi eksik';
+  }
+
+  @override
+  String searchHealthPar2Blocks(int count) {
+    return '$count PAR2 onarım bloğu mevcut';
+  }
+
+  @override
+  String get searchHealthNoPar2 => 'Bu yayında PAR2 onarım verisi yok';
+
+  @override
+  String get searchHealthMissingVolumes =>
+      'NZB listesinde bazı arşiv ciltleri eksik';
 }

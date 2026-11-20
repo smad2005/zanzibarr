@@ -3,6 +3,7 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/health.dart';
 import 'api/repair.dart';
 import 'api/search.dart';
 import 'api/simple.dart';
@@ -99,6 +100,11 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<bool> crateApiRepairCancelRepair({required BigInt sessionId});
+
+  Future<NzbHealthDto> crateApiHealthCheckNzbHealth({
+    required ProviderConfigDto config,
+    required String nzbPath,
+  });
 
   String crateApiSimpleEngineInfo();
 
@@ -312,12 +318,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "cancel_repair", argNames: ["sessionId"]);
 
   @override
+  Future<NzbHealthDto> crateApiHealthCheckNzbHealth({
+    required ProviderConfigDto config,
+    required String nzbPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_provider_config_dto(config, serializer);
+          sse_encode_String(nzbPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_nzb_health_dto,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiHealthCheckNzbHealthConstMeta,
+        argValues: [config, nzbPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHealthCheckNzbHealthConstMeta =>
+      const TaskConstMeta(
+        debugName: "check_nzb_health",
+        argNames: ["config", "nzbPath"],
+      );
+
+  @override
   String crateApiSimpleEngineInfo() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -340,7 +381,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(name, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -365,7 +406,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },
@@ -399,7 +440,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 10,
             port: port_,
           );
         },
@@ -432,7 +473,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 11,
             port: port_,
           );
         },
@@ -465,7 +506,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 12,
             port: port_,
           );
         },
@@ -504,7 +545,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -543,7 +584,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 14,
             port: port_,
           );
         },
@@ -576,7 +617,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 15,
             port: port_,
           );
         },
@@ -611,7 +652,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 16,
             port: port_,
           );
         },
@@ -642,7 +683,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 17,
             port: port_,
           );
         },
@@ -762,6 +803,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<SearchItemDto> dco_decode_list_search_item_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_search_item_dto).toList();
+  }
+
+  @protected
+  NzbHealthDto dco_decode_nzb_health_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    return NzbHealthDto(
+      status: dco_decode_String(arr[0]),
+      sampledArticles: dco_decode_u_32(arr[1]),
+      missingArticles: dco_decode_u_32(arr[2]),
+      erroredSamples: dco_decode_u_32(arr[3]),
+      estimatedMissingArticles: dco_decode_u_64(arr[4]),
+      targetArticleCount: dco_decode_u_64(arr[5]),
+      targetFileCount: dco_decode_u_32(arr[6]),
+      archiveVolumes: dco_decode_u_32(arr[7]),
+      volumeGaps: dco_decode_u_32(arr[8]),
+      headMissing: dco_decode_bool(arr[9]),
+      par2Present: dco_decode_bool(arr[10]),
+      par2RecoveryBlocks: dco_decode_u_32(arr[11]),
+    );
   }
 
   @protected
@@ -1065,6 +1128,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       ans_.add(sse_decode_search_item_dto(deserializer));
     }
     return ans_;
+  }
+
+  @protected
+  NzbHealthDto sse_decode_nzb_health_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_status = sse_decode_String(deserializer);
+    var var_sampledArticles = sse_decode_u_32(deserializer);
+    var var_missingArticles = sse_decode_u_32(deserializer);
+    var var_erroredSamples = sse_decode_u_32(deserializer);
+    var var_estimatedMissingArticles = sse_decode_u_64(deserializer);
+    var var_targetArticleCount = sse_decode_u_64(deserializer);
+    var var_targetFileCount = sse_decode_u_32(deserializer);
+    var var_archiveVolumes = sse_decode_u_32(deserializer);
+    var var_volumeGaps = sse_decode_u_32(deserializer);
+    var var_headMissing = sse_decode_bool(deserializer);
+    var var_par2Present = sse_decode_bool(deserializer);
+    var var_par2RecoveryBlocks = sse_decode_u_32(deserializer);
+    return NzbHealthDto(
+      status: var_status,
+      sampledArticles: var_sampledArticles,
+      missingArticles: var_missingArticles,
+      erroredSamples: var_erroredSamples,
+      estimatedMissingArticles: var_estimatedMissingArticles,
+      targetArticleCount: var_targetArticleCount,
+      targetFileCount: var_targetFileCount,
+      archiveVolumes: var_archiveVolumes,
+      volumeGaps: var_volumeGaps,
+      headMissing: var_headMissing,
+      par2Present: var_par2Present,
+      par2RecoveryBlocks: var_par2RecoveryBlocks,
+    );
   }
 
   @protected
@@ -1418,6 +1512,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     for (final item in self) {
       sse_encode_search_item_dto(item, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_nzb_health_dto(NzbHealthDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.status, serializer);
+    sse_encode_u_32(self.sampledArticles, serializer);
+    sse_encode_u_32(self.missingArticles, serializer);
+    sse_encode_u_32(self.erroredSamples, serializer);
+    sse_encode_u_64(self.estimatedMissingArticles, serializer);
+    sse_encode_u_64(self.targetArticleCount, serializer);
+    sse_encode_u_32(self.targetFileCount, serializer);
+    sse_encode_u_32(self.archiveVolumes, serializer);
+    sse_encode_u_32(self.volumeGaps, serializer);
+    sse_encode_bool(self.headMissing, serializer);
+    sse_encode_bool(self.par2Present, serializer);
+    sse_encode_u_32(self.par2RecoveryBlocks, serializer);
   }
 
   @protected
