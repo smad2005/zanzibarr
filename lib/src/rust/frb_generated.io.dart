@@ -8,6 +8,7 @@ import 'api/repair.dart';
 import 'api/search.dart';
 import 'api/simple.dart';
 import 'api/streaming.dart';
+import 'api/subtitles.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
@@ -33,6 +34,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   IndexerConfigDto dco_decode_box_autoadd_indexer_config_dto(dynamic raw);
+
+  @protected
+  OpenSubtitlesConfigDto dco_decode_box_autoadd_open_subtitles_config_dto(
+    dynamic raw,
+  );
 
   @protected
   ProviderConfigDto dco_decode_box_autoadd_provider_config_dto(dynamic raw);
@@ -68,7 +74,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<SearchItemDto> dco_decode_list_search_item_dto(dynamic raw);
 
   @protected
+  List<SubtitleDto> dco_decode_list_subtitle_dto(dynamic raw);
+
+  @protected
   NzbHealthDto dco_decode_nzb_health_dto(dynamic raw);
+
+  @protected
+  OpenSubtitlesConfigDto dco_decode_open_subtitles_config_dto(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
@@ -109,6 +121,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StreamInfo dco_decode_stream_info(dynamic raw);
 
   @protected
+  SubtitleDto dco_decode_subtitle_dto(dynamic raw);
+
+  @protected
   int dco_decode_u_16(dynamic raw);
 
   @protected
@@ -134,6 +149,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   IndexerConfigDto sse_decode_box_autoadd_indexer_config_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  OpenSubtitlesConfigDto sse_decode_box_autoadd_open_subtitles_config_dto(
     SseDeserializer deserializer,
   );
 
@@ -179,7 +199,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<SubtitleDto> sse_decode_list_subtitle_dto(SseDeserializer deserializer);
+
+  @protected
   NzbHealthDto sse_decode_nzb_health_dto(SseDeserializer deserializer);
+
+  @protected
+  OpenSubtitlesConfigDto sse_decode_open_subtitles_config_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
@@ -224,6 +252,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StreamInfo sse_decode_stream_info(SseDeserializer deserializer);
 
   @protected
+  SubtitleDto sse_decode_subtitle_dto(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
@@ -256,6 +287,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_indexer_config_dto(
     IndexerConfigDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_open_subtitles_config_dto(
+    OpenSubtitlesConfigDto self,
     SseSerializer serializer,
   );
 
@@ -314,7 +351,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_subtitle_dto(
+    List<SubtitleDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_nzb_health_dto(NzbHealthDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_open_subtitles_config_dto(
+    OpenSubtitlesConfigDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
@@ -369,6 +418,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_stream_info(StreamInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_subtitle_dto(SubtitleDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);

@@ -918,4 +918,59 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get searchHealthMissingVolumes =>
       'Some archive volumes are missing from the NZB';
+
+  @override
+  String get subtitleSearchTooltip => 'Search subtitles online';
+
+  @override
+  String get subtitleSearchTitle => 'OpenSubtitles';
+
+  @override
+  String get subtitleSearching => 'Searching…';
+
+  @override
+  String get subtitleSearchNoResults => 'No subtitles found for this release.';
+
+  @override
+  String get subtitleSearchPickLanguage => 'Pick at least one language.';
+
+  @override
+  String get subtitleSearchFailed => 'Subtitle search failed.';
+
+  @override
+  String get subtitleSearchMatch => 'Exact file match';
+
+  @override
+  String subtitleSearchDownloads(int count) {
+    return '$count downloads';
+  }
+
+  @override
+  String get subtitleSearchMissingSettings =>
+      'Add your OpenSubtitles API key in Settings to search subtitles.';
+
+  @override
+  String get subtitleSearchClose => 'Close';
+
+  @override
+  String get settingsOsSectionTitle => 'OpenSubtitles';
+
+  @override
+  String get settingsOsSectionSubtitle =>
+      'Optional — brings automatic online subtitle search (OpenSubtitles) to the player. Create a free account and an API key under Profile → API consumers on opensubtitles.com. Signing in raises the daily download limit.';
+
+  @override
+  String get settingsOsUrlLabel => 'API base URL';
+
+  @override
+  String get settingsOsApiKeyLabel => 'OpenSubtitles API key';
+
+  @override
+  String get settingsOsUsernameLabel => 'Username (optional)';
+
+  @override
+  String get settingsOsPasswordLabel => 'Password (optional)';
+
+  @override
+  String get settingsOsSaveLabel => 'Save subtitle settings';
 }

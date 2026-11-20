@@ -8,6 +8,7 @@ import 'l10n_test_helper.dart';
 Widget buildOverlay({
   String font = 'sans',
   ValueChanged<String>? onFontChanged,
+  VoidCallback? onSearchSubtitles,
 }) {
   return Scaffold(
     body: SubtitleControlsOverlay(
@@ -24,6 +25,7 @@ Widget buildOverlay({
       onColorChanged: (_) {},
       onFontChanged: onFontChanged ?? (_) {},
       onTrackSelected: (_) {},
+      onSearchSubtitles: onSearchSubtitles,
       onClose: () {},
     ),
   );
@@ -70,5 +72,28 @@ void main() {
       find.descendant(of: sansItem, matching: find.byIcon(Icons.check)),
       findsNothing,
     );
+  });
+
+  testWidgets('arama düğmesi yalnız geri çağırma verilince görünür', (
+    tester,
+  ) async {
+    await tester.pumpWithL10n(buildOverlay());
+    expect(find.byTooltip('Altyazıları çevrimiçi ara'), findsNothing);
+
+    await tester.pumpWithL10n(
+      buildOverlay(onSearchSubtitles: () {}),
+    );
+    expect(find.byTooltip('Altyazıları çevrimiçi ara'), findsOneWidget);
+  });
+
+  testWidgets('arama düğmesi geri çağrıyı tetikler', (tester) async {
+    var pressed = 0;
+    await tester.pumpWithL10n(
+      buildOverlay(onSearchSubtitles: () => pressed++),
+    );
+    await tester.tap(find.byTooltip('Altyazıları çevrimiçi ara'));
+    await tester.pumpAndSettle();
+
+    expect(pressed, 1);
   });
 }

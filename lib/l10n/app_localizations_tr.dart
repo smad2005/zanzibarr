@@ -918,4 +918,59 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get searchHealthMissingVolumes =>
       'NZB listesinde bazı arşiv ciltleri eksik';
+
+  @override
+  String get subtitleSearchTooltip => 'Altyazıları çevrimiçi ara';
+
+  @override
+  String get subtitleSearchTitle => 'OpenSubtitles';
+
+  @override
+  String get subtitleSearching => 'Aranıyor…';
+
+  @override
+  String get subtitleSearchNoResults => 'Bu yayın için altyazı bulunamadı.';
+
+  @override
+  String get subtitleSearchPickLanguage => 'En az bir dil seçin.';
+
+  @override
+  String get subtitleSearchFailed => 'Altyazı araması başarısız.';
+
+  @override
+  String get subtitleSearchMatch => 'Dosya eşleşmesi';
+
+  @override
+  String subtitleSearchDownloads(int count) {
+    return '$count indirme';
+  }
+
+  @override
+  String get subtitleSearchMissingSettings =>
+      'Altyazı aramak için Ayarlar\'dan OpenSubtitles API anahtarını ekleyin.';
+
+  @override
+  String get subtitleSearchClose => 'Kapat';
+
+  @override
+  String get settingsOsSectionTitle => 'OpenSubtitles';
+
+  @override
+  String get settingsOsSectionSubtitle =>
+      'İsteğe bağlı — oynatıcıya çevrimiçi altyazı araması (OpenSubtitles) ekler. opensubtitles.com\'da ücretsiz hesap açıp Profil → API consumers bölümünden bir API anahtarı oluşturun. Hesabınızla giriş yapmak günlük indirme kotanızı yükseltir.';
+
+  @override
+  String get settingsOsUrlLabel => 'API kök adresi';
+
+  @override
+  String get settingsOsApiKeyLabel => 'OpenSubtitles API anahtarı';
+
+  @override
+  String get settingsOsUsernameLabel => 'Kullanıcı adı (isteğe bağlı)';
+
+  @override
+  String get settingsOsPasswordLabel => 'Parola (isteğe bağlı)';
+
+  @override
+  String get settingsOsSaveLabel => 'Altyazı ayarlarını kaydet';
 }

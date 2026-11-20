@@ -9,13 +9,17 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../cast/cast_device_picker.dart';
 import '../cast/cast_service.dart';
 import '../l10n/app_localizations.dart';
+import '../settings/opensubtitles_settings.dart';
 import '../settings/provider_settings.dart';
 import '../src/rust/api/repair.dart';
 import '../src/rust/api/streaming.dart';
+import '../src/rust/api/subtitles.dart'
+    show OpenSubtitlesConfigDto, SubtitleDto, downloadOpensubtitles, searchOpensubtitles;
 import 'advanced_playback_controller.dart';
 import 'chapter.dart';
 import 'entry_picker.dart';
@@ -29,6 +33,7 @@ import 'smart_canvas.dart';
 import 'smart_canvas_overlay.dart';
 import 'subtitle_controls_overlay.dart';
 import 'subtitle_fonts.dart';
+import 'subtitle_search_dialog.dart';
 
 /// Seçilen NZB'yi Rust localhost server üzerinden media_kit ile oynatır.
 ///
@@ -61,6 +66,9 @@ class PlayerScreen extends StatefulWidget {
     this.historyStore,
     this.castService,
     this.initialEntryKey,
+    this.osStore,
+    this.osSearchFn,
+    this.osDownloadFn,
     this.startupTimeout = const Duration(seconds: 45),
     this.streamPreparationTimeout = const Duration(seconds: 90),
   });
@@ -87,6 +95,16 @@ class PlayerScreen extends StatefulWidget {
 
   /// Cast (TV'ye yansıtma) servisi; testlerde sahte enjekte edilir.
   final CastController? castService;
+
+  /// OpenSubtitles ayarları (API anahtarı + hesap + dil tercihleri);
+  /// null ise gerçek depo kullanılır. Gizli anahtarlar yalnızca OS
+  /// keychain'de tutulur.
+  final OpenSubtitlesSettingsStore? osStore;
+
+  /// OpenSubtitles arama/indirme işlevleri; testlerde sahte enjekte
+  /// edilir (ağ ve kota gerektirmeden).
+  final OpenSubtitlesSearchFn? osSearchFn;
+  final OpenSubtitlesDownloadFn? osDownloadFn;
 
   /// libmpv video izini tanıyamazsa sonsuz spinner yerine hata gösterilir.
   final Duration startupTimeout;
@@ -118,6 +136,12 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final MediaPreferencesStore _preferenceStore;
   late final PlaybackHistoryStore _historyStore;
   late final CastController _castService;
+  late final OpenSubtitlesSettingsStore _osStore =
+      widget.osStore ?? OpenSubtitlesSettingsStore();
+  late final OpenSubtitlesSearchFn _osSearchFn =
+      widget.osSearchFn ?? _defaultOpenSubtitlesSearch;
+  late final OpenSubtitlesDownloadFn _osDownloadFn =
+      widget.osDownloadFn ?? _defaultOpenSubtitlesDownload;
 
   // Cast (TV'ye yansıtma) oturumu. Cast aktifken yerel player duraklatılır;
   // kumanda komutları (oynat/seek/ses) cast oturumuna aynalanır ve pozisyon
@@ -567,6 +591,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       // kontrol ederek readiness olayını kaçırmayız.
       _onVideoWidth(_player.state.width);
       _onTracks(_player.state.tracks);
+      unawaited(_autoLoadExternalSubtitle(info));
     } catch (error) {
       await _releaseNativeStream();
       if (_startupFailed) return;
@@ -580,6 +605,201 @@ class _PlayerScreenState extends State<PlayerScreen>
           AppLocalizations.of(context),
         ),
       );
+    }
+  }
+
+  // ---- OpenSubtitles external subtitles -----------------------------------
+
+  static Future<List<SubtitleDto>> _defaultOpenSubtitlesSearch(
+    OpenSubtitlesConfigDto config,
+    String query,
+    List<String> languages,
+    String? movieHash,
+    BigInt? movieBytesize,
+  ) => searchOpensubtitles(
+    config: config,
+    query: query,
+    languages: languages,
+    movieHash: movieHash,
+    movieBytesize: movieBytesize,
+  );
+
+  static Future<String> _defaultOpenSubtitlesDownload(
+    OpenSubtitlesConfigDto config,
+    BigInt fileId,
+    String? downloadDir,
+  ) => downloadOpensubtitles(
+    config: config,
+    fileId: fileId,
+    downloadDir: downloadDir,
+  );
+
+  /// OpenSubtitles ayarlarını okur. Depo test ortamında secure storage
+  /// tamamlanmıyorsa (asla hata vermez, askıda kalır) kısa bir zaman aşımı
+  /// sessiz düşüş sağlar — arama ekranındaki Provider korumasıyla aynı
+  /// desen.
+  Future<OpenSubtitlesSettings?> _loadOpenSubtitlesSettings() async {
+    try {
+      return await _osStore.load().timeout(const Duration(seconds: 3));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// İndirilen altyazıların yazıldığı app-cache alt dizini. Android'de
+  /// dizin izni gerekmez (issue #3 ile aynı gerekçe: TMPDIR yazılamaz).
+  Future<String?> _subtitleCacheDirectory() async {
+    try {
+      final cacheRoot = await getApplicationCacheDirectory();
+      return '${cacheRoot.path}${Platform.pathSeparator}subtitles';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  OpenSubtitlesConfigDto _osConfigFor(OpenSubtitlesSettings settings) =>
+      OpenSubtitlesConfigDto(
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+        username: settings.username,
+        password: settings.password,
+      );
+
+  /// Altyazı panelindeki arama düğmesi: OpenSubtitles diyalogunu açar.
+  /// API anahtarı girilmemişse kullanıcı yönlendirmesi gösterir.
+  Future<void> _openSubtitleSearch() async {
+    final info = _info;
+    if (info == null || !mounted) return;
+    final settings = await _loadOpenSubtitlesSettings();
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context);
+    if (settings == null || !settings.canSearch) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(l10n.subtitleSearchMissingSettings),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      return;
+    }
+    final downloadDir = await _subtitleCacheDirectory();
+    if (!mounted || downloadDir == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => SubtitleSearchDialog(
+        config: _osConfigFor(settings),
+        filename: info.filename,
+        streamUrl: info.url,
+        streamSize: info.size.toInt(),
+        downloadDir: downloadDir,
+        initialLanguages: settings.languages,
+        searchFn: _osSearchFn,
+        downloadFn: _osDownloadFn,
+        hashFn: defaultOpenSubtitlesHashFn,
+        onSelected: (path, language) => unawaited(
+          _applyExternalSubtitle(path, language: language, persist: true),
+        ),
+        onLanguagesChanged: (languages) =>
+            unawaited(_osStore.saveLanguages(languages)),
+      ),
+    );
+  }
+
+  /// İndirilmiş altyazıyı oynatıcıya ekler (`sub-add … select`; akış
+  /// kesilmez). [persist] true ise girdi dosyasına + içerik dil tercihiyle
+  /// ilişkilendirilir: kuyruğun sonraki bölümleri aynı tercihi sürdürür.
+  Future<void> _applyExternalSubtitle(
+    String path, {
+    required String language,
+    required bool persist,
+  }) async {
+    try {
+      await _playback.addExternalSubtitle(
+        path,
+        title: language.isEmpty ? null : subtitleLanguageLabel(language),
+        language: language.isEmpty ? null : language,
+      );
+    } catch (_) {
+      // mpv altyazıyı reddederse (bozuk dosya vb.) akış düşürülmez.
+      return;
+    }
+    if (!persist || !mounted) return;
+    final entryName = _info?.filename;
+    if (entryName == null || entryName.isEmpty) return;
+    setState(() {
+      _preferences = _preferences.copyWithExternalSubtitle(
+        entryName: entryName,
+        subtitle: ExternalSubtitle(path: path, language: language),
+        language: language.isEmpty ? null : language,
+      );
+    });
+    _schedulePreferencePersist();
+  }
+
+  /// Bölüm açılırken harici altyazıyı otomatik yükler:
+  /// 1. Bu girdi için öncece seçilmiş altyazı diskteyse ağa çıkılmadan
+  ///    yeniden eklenir.
+  /// 2. Yoksa ve içerik tercihi dilde altyazı seçilmişse arka planda en
+  ///    iyi eşleşme (hash eşleşmesi > ilk sonuç) aranıp indirilir.
+  /// Tüm hatalar sessizdir; otomatik akış oynatmayı asla düşürmez.
+  Future<void> _autoLoadExternalSubtitle(StreamInfo info) async {
+    final entryName = info.filename;
+    if (entryName.isEmpty) return;
+    final associated = _preferences.externalSubtitles[entryName];
+    if (associated != null) {
+      if (File(associated.path).existsSync()) {
+        await _applyExternalSubtitle(
+          associated.path,
+          language: associated.language,
+          persist: false,
+        );
+        return;
+      }
+      // Dosya app cache temizliğiyle silinmiş: dil tercihinden devam.
+    }
+    final preferred = _preferences.subtitleLanguage;
+    if (preferred == null) return;
+    final settings = await _loadOpenSubtitlesSettings();
+    if (settings == null || !settings.canSearch) return;
+    if (!mounted || _info != info) return;
+    final downloadDir = await _subtitleCacheDirectory();
+    if (downloadDir == null || !mounted || _info != info) return;
+    final config = _osConfigFor(settings);
+    try {
+      final hash = await defaultOpenSubtitlesHashFn(
+        info.url,
+        info.size.toInt(),
+      );
+      if (!mounted || _info != info) return;
+      // Otomatik yükleme, kullanıcının bu içerik için seçtiği tek dile
+      // sınırlı kalır; diyalogdaki geniş dil seti bilinçli arama içindir.
+      final results = await _osSearchFn(
+        config,
+        info.filename,
+        [preferred],
+        hash,
+        info.size,
+      );
+      if (!mounted || _info != info || results.isEmpty) return;
+      var best = results.first;
+      for (final result in results) {
+        if (result.matchedByHash) {
+          best = result;
+          break;
+        }
+      }
+      final path = await _osDownloadFn(config, best.fileId, downloadDir);
+      if (!mounted || _info != info) return;
+      await _applyExternalSubtitle(
+        path,
+        language: best.language.isEmpty ? preferred : best.language,
+        persist: true,
+      );
+    } catch (_) {
+      // Kota tükendi/ağ hatası: otomatik akış sessiz kalır; kullanıcı
+      // altyazı panelinden elle arayabilir.
     }
   }
 
@@ -1274,6 +1494,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       audioDelaySeconds:
           _audioDelay.inMicroseconds / Duration.microsecondsPerSecond,
       showChapters: _preferences.showChapters,
+      subtitleLanguage: _preferences.subtitleLanguage,
+      externalSubtitles: _preferences.externalSubtitles,
     );
     _preferences = preferences;
     final write = _preferenceWriteTail.then((_) async {
@@ -3588,6 +3810,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         onColorChanged: _queueSubtitleColor,
         onFontChanged: _queueSubtitleFont,
         onTrackSelected: (track) => unawaited(_selectSubtitle(track)),
+        onSearchSubtitles: () => unawaited(_openSubtitleSearch()),
         onClose: _toggleSubtitleControls,
       );
     }

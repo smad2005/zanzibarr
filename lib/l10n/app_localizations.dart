@@ -1729,6 +1729,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some archive volumes are missing from the NZB'**
   String get searchHealthMissingVolumes;
+
+  /// No description provided for @subtitleSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Search subtitles online'**
+  String get subtitleSearchTooltip;
+
+  /// No description provided for @subtitleSearchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenSubtitles'**
+  String get subtitleSearchTitle;
+
+  /// No description provided for @subtitleSearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching…'**
+  String get subtitleSearching;
+
+  /// No description provided for @subtitleSearchNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No subtitles found for this release.'**
+  String get subtitleSearchNoResults;
+
+  /// No description provided for @subtitleSearchPickLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick at least one language.'**
+  String get subtitleSearchPickLanguage;
+
+  /// No description provided for @subtitleSearchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitle search failed.'**
+  String get subtitleSearchFailed;
+
+  /// No description provided for @subtitleSearchMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Exact file match'**
+  String get subtitleSearchMatch;
+
+  /// No description provided for @subtitleSearchDownloads.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} downloads'**
+  String subtitleSearchDownloads(int count);
+
+  /// No description provided for @subtitleSearchMissingSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Add your OpenSubtitles API key in Settings to search subtitles.'**
+  String get subtitleSearchMissingSettings;
+
+  /// No description provided for @subtitleSearchClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get subtitleSearchClose;
+
+  /// No description provided for @settingsOsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenSubtitles'**
+  String get settingsOsSectionTitle;
+
+  /// No description provided for @settingsOsSectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional — brings automatic online subtitle search (OpenSubtitles) to the player. Create a free account and an API key under Profile → API consumers on opensubtitles.com. Signing in raises the daily download limit.'**
+  String get settingsOsSectionSubtitle;
+
+  /// No description provided for @settingsOsUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'API base URL'**
+  String get settingsOsUrlLabel;
+
+  /// No description provided for @settingsOsApiKeyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenSubtitles API key'**
+  String get settingsOsApiKeyLabel;
+
+  /// No description provided for @settingsOsUsernameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Username (optional)'**
+  String get settingsOsUsernameLabel;
+
+  /// No description provided for @settingsOsPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password (optional)'**
+  String get settingsOsPasswordLabel;
+
+  /// No description provided for @settingsOsSaveLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Save subtitle settings'**
+  String get settingsOsSaveLabel;
 }
 
 class _AppLocalizationsDelegate

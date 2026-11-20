@@ -422,5 +422,27 @@
     }
   },
   "searchHealthNoPar2": "No PAR2 repair data in this post",
-  "searchHealthMissingVolumes": "Some archive volumes are missing from the NZB"
+  "searchHealthMissingVolumes": "Some archive volumes are missing from the NZB",
+  "subtitleSearchTooltip": "Search subtitles online",
+  "subtitleSearchTitle": "OpenSubtitles",
+  "subtitleSearching": "Searching…",
+  "subtitleSearchNoResults": "No subtitles found for this release.",
+  "subtitleSearchPickLanguage": "Pick at least one language.",
+  "subtitleSearchFailed": "Subtitle search failed.",
+  "subtitleSearchMatch": "Exact file match",
+  "subtitleSearchDownloads": "{count} downloads",
+"@subtitleSearchDownloads": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "subtitleSearchMissingSettings": "Add your OpenSubtitles API key in Settings to search subtitles.",
+  "subtitleSearchClose": "Close",
+  "settingsOsSectionTitle": "OpenSubtitles",
+  "settingsOsSectionSubtitle": "Optional — brings automatic online subtitle search (OpenSubtitles) to the player. Create a free account and an API key under Profile → API consumers on opensubtitles.com. Signing in raises the daily download limit.",
+  "settingsOsUrlLabel": "API base URL",
+  "settingsOsApiKeyLabel": "OpenSubtitles API key",
+  "settingsOsUsernameLabel": "Username (optional)",
+  "settingsOsPasswordLabel": "Password (optional)",
+  "settingsOsSaveLabel": "Save subtitle settings"
 }

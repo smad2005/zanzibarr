@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../src/rust/api/search.dart';
 import '../tv_focus.dart';
 import 'indexer_settings.dart';
+import 'opensubtitles_settings.dart';
 import 'provider_settings.dart';
 import 'ui_preferences.dart';
 
@@ -21,6 +22,7 @@ class SettingsScreen extends StatefulWidget {
     this.uiPreferences,
     this.indexerStore,
     this.capsFn,
+    this.osStore,
   });
 
   /// Testlerde sahte depo enjekte edebilmek için; null ise gerçek depo kullanılır.
@@ -36,6 +38,10 @@ class SettingsScreen extends StatefulWidget {
   /// `newznabCheckCaps` kullanılır.
   final NewznabCapsFn? capsFn;
 
+  /// OpenSubtitles (altyazı arama) ayarları için; null ise gerçek depo
+  /// kullanılır.
+  final OpenSubtitlesSettingsStore? osStore;
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -46,6 +52,8 @@ class _SettingsScreenState extends State<SettingsScreen>
       widget.store ?? ProviderSettingsStore();
   late final IndexerSettingsStore _indexerStore =
       widget.indexerStore ?? IndexerSettingsStore();
+  late final OpenSubtitlesSettingsStore _osStore =
+      widget.osStore ?? OpenSubtitlesSettingsStore();
   late final NewznabCapsFn _capsFn =
       widget.capsFn ?? (config) => newznabCheckCaps(config: config);
 
@@ -60,6 +68,13 @@ class _SettingsScreenState extends State<SettingsScreen>
   final _indexerFormKey = GlobalKey<FormState>();
   final _indexerUrlController = TextEditingController();
   final _indexerApiKeyController = TextEditingController();
+
+  // OpenSubtitles bölümü de kendi Form'unu taşır (API anahtarı + hesap).
+  final _osFormKey = GlobalKey<FormState>();
+  final _osUrlController = TextEditingController();
+  final _osApiKeyController = TextEditingController();
+  final _osUsernameController = TextEditingController();
+  final _osPasswordController = TextEditingController();
 
   // TV kumandasında yukarı/aşağı oklar alandan çıkabilsin diye D-pad
   // gezintili odak düğümleri (issue #4). Parola/API anahtarı alanlarının
@@ -92,6 +107,27 @@ class _SettingsScreenState extends State<SettingsScreen>
     controller: _indexerApiKeyController,
     fieldNode: _indexerApiKeyFocusNode,
   );
+  // OpenSubtitles alanları: indexer bölümüyle aynı D-pad düzeni.
+  late final _osUrlFocusNode = dpadTraversalFocusNode(_osUrlController);
+  late final FocusNode _osApiKeyFocusNode = dpadTraversalFocusNode(
+    _osApiKeyController,
+    focusOnRightEdge: () => _osApiKeyEyeFocusNode,
+  );
+  late final FocusNode _osApiKeyEyeFocusNode = dpadFieldActionFocusNode(
+    controller: _osApiKeyController,
+    fieldNode: _osApiKeyFocusNode,
+  );
+  late final _osUsernameFocusNode = dpadTraversalFocusNode(
+    _osUsernameController,
+  );
+  late final FocusNode _osPasswordFocusNode = dpadTraversalFocusNode(
+    _osPasswordController,
+    focusOnRightEdge: () => _osPasswordEyeFocusNode,
+  );
+  late final FocusNode _osPasswordEyeFocusNode = dpadFieldActionFocusNode(
+    controller: _osPasswordController,
+    fieldNode: _osPasswordFocusNode,
+  );
 
   bool _loading = true;
   bool _saving = false;
@@ -99,6 +135,11 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _savingIndexer = false;
   bool _testingIndexer = false;
   bool _obscureApiKey = true;
+  bool _savingOpenSubtitles = false;
+  bool _obscureOsApiKey = true;
+  bool _obscureOsPassword = true;
+  /// Dil tercihleri (arama diyalogundaki çipler) kaydetmede korunur.
+  List<String> _osLanguages = OpenSubtitlesSettings.defaultLanguages;
   Object? _loadError;
 
   @override
@@ -107,6 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     WidgetsBinding.instance.addObserver(this);
     _load();
     _loadIndexer();
+    _loadOpenSubtitles();
   }
 
   @override
@@ -116,6 +158,12 @@ class _SettingsScreenState extends State<SettingsScreen>
         setState(() {
           _obscurePassword = true;
           _obscureApiKey = true;
+        });
+      }
+      if (!_obscureOsApiKey || !_obscureOsPassword) {
+        setState(() {
+          _obscureOsApiKey = true;
+          _obscureOsPassword = true;
         });
       }
     }
@@ -227,6 +275,250 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (!mounted || !saved) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context).settingsSaved)),
+    );
+  }
+
+  Future<void> _loadOpenSubtitles() async {
+    // Indexer bölümüyle aynı desen: widget testlerinde secure storage hiç
+    // hata vermeden askıda kalabilir; herhangi bir koşulda bölüm varsayılan
+    // (boş) alanlarla sessizce açılır. Zamanlayıcı kullanılmaz — test
+    // sonunda bekleyen Timer kalmaz.
+    try {
+      final settings = await _osStore.load();
+      if (!mounted) return;
+      setState(() {
+        _osUrlController.text = settings.baseUrl;
+        _osApiKeyController.text = settings.apiKey;
+        _osUsernameController.text = settings.username;
+        _osPasswordController.text = settings.password;
+        _osLanguages = settings.languages;
+      });
+    } catch (_) {
+      // Depo okunamıyorsa bölüm boş formlarla açılır.
+    }
+  }
+
+  /// OpenSubtitles bölümünü kaydeder. Dil tercihleri arama diyalogundan
+  /// yönetilir; burada korunarak geri yazılır (ezilmesin).
+  Future<void> _saveOpenSubtitles() async {
+    if (_savingOpenSubtitles) return;
+    if (!_osFormKey.currentState!.validate()) return;
+    setState(() {
+      _savingOpenSubtitles = true;
+      _obscureOsApiKey = true;
+      _obscureOsPassword = true;
+    });
+    var saved = false;
+    try {
+      await _osStore.save(
+        OpenSubtitlesSettings(
+          baseUrl: _osUrlController.text.trim(),
+          apiKey: _osApiKeyController.text.trim(),
+          username: _osUsernameController.text.trim(),
+          password: _osPasswordController.text,
+          languages: _osLanguages,
+        ),
+      );
+      saved = true;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).settingsSaveFailed('$e')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingOpenSubtitles = false);
+    }
+    if (!mounted || !saved) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context).settingsSaved)),
+    );
+  }
+
+  /// URL opsiyoneldir (motor varsayılanı kullanılır); girildiyse http(s)
+  /// ile başlamalıdır.
+  String? _validateOpenSubtitlesUrl(String? value) {
+    final url = value?.trim() ?? '';
+    if (url.isEmpty) return null;
+    final uri = Uri.tryParse(url);
+    final valid =
+        (uri?.scheme == 'http' || uri?.scheme == 'https') &&
+        (uri?.host.isNotEmpty ?? false);
+    if (!valid) {
+      return AppLocalizations.of(context).indexerUrlInvalid;
+    }
+    return null;
+  }
+
+  /// Ayarlar ekranındaki OpenSubtitles bölümü: kök adres, API anahtarı,
+  /// kullanıcı adı/parola (indirme kotası için opsiyonel hesap) ve kaydet
+  /// düğmesi. Indexer bölümüyle aynı D-pad kolaylaştırma desenini taşır.
+  Widget _buildOpenSubtitlesSection(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 30),
+        Text(
+          l10n.settingsOsSectionTitle,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.35,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          l10n.settingsOsSectionSubtitle,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.45),
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 24),
+        // OpenSubtitles bölümü de kendi Form'unu taşır: bağımsız doğrulama
+        // + bağımsız kaydet (indexer deseni).
+        Form(
+          key: _osFormKey,
+          child: Column(
+            children: [
+              _SettingsCard(
+                children: [
+                  TextFormField(
+                    controller: _osUrlController,
+                    focusNode: _osUrlFocusNode,
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsOsUrlLabel,
+                      hintText: 'https://api.opensubtitles.com',
+                      prefixIcon: const Icon(Icons.public_rounded, size: 19),
+                    ),
+                    textInputAction: TextInputAction.next,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    validator: _validateOpenSubtitlesUrl,
+                  ),
+                  const SizedBox(height: 12),
+                  // Göz düğmesi skipTraversal'lı: indexer bölümüyle aynı
+                  // D-pad deseni (issue #4).
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _osApiKeyController,
+                          focusNode: _osApiKeyFocusNode,
+                          obscureText: _obscureOsApiKey,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          onFieldSubmitted: (_) => _saveOpenSubtitles(),
+                          decoration: InputDecoration(
+                            labelText: l10n.settingsOsApiKeyLabel,
+                            prefixIcon: const Icon(Icons.key_rounded, size: 19),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        focusNode: _osApiKeyEyeFocusNode,
+                        tooltip: _obscureOsApiKey
+                            ? l10n.passwordShowTooltip
+                            : l10n.passwordHideTooltip,
+                        icon: Icon(
+                          _obscureOsApiKey
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
+                          size: 18,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscureOsApiKey = !_obscureOsApiKey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _osUsernameController,
+                    focusNode: _osUsernameFocusNode,
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsOsUsernameLabel,
+                      prefixIcon: const Icon(
+                        Icons.person_outline_rounded,
+                        size: 19,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _osPasswordController,
+                          focusNode: _osPasswordFocusNode,
+                          obscureText: _obscureOsPassword,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          onFieldSubmitted: (_) => _saveOpenSubtitles(),
+                          decoration: InputDecoration(
+                            labelText: l10n.settingsOsPasswordLabel,
+                            prefixIcon: const Icon(
+                              Icons.lock_outline_rounded,
+                              size: 19,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        focusNode: _osPasswordEyeFocusNode,
+                        tooltip: _obscureOsPassword
+                            ? l10n.passwordShowTooltip
+                            : l10n.passwordHideTooltip,
+                        icon: Icon(
+                          _obscureOsPassword
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
+                          size: 18,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscureOsPassword = !_obscureOsPassword,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              // Kaydet düğmesi dikey zincirde tek başına: TV kumandasında
+              // yukarı/aşağı hatasız iner (issue #4).
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: _savingOpenSubtitles
+                      ? null
+                      : _saveOpenSubtitles,
+                  icon: _savingOpenSubtitles
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 1.8),
+                        )
+                      : const Icon(Icons.check_rounded, size: 18),
+                  label: Text(
+                    _savingOpenSubtitles
+                        ? l10n.savingLabel
+                        : l10n.settingsOsSaveLabel,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -805,6 +1097,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ],
                         ),
                       ),
+                      _buildOpenSubtitlesSection(context),
                     ],
                   ),
                 ),

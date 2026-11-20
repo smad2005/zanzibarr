@@ -11,6 +11,7 @@ pub mod newznab;
 pub mod nntp;
 pub mod nntp_source;
 pub mod nzb;
+pub mod opensubtitles;
 pub mod par2;
 pub mod rar;
 pub mod rarcrypt;

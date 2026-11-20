@@ -246,25 +246,93 @@ void main() {
     expect(await store.load(path), MediaPreferences.defaults());
   });
 
-  test('showChapters defaults to true and round-trips through JSON', () {
-    expect(MediaPreferences().showChapters, isTrue);
+  group('External subtitle association (schema v2)', () {
+    test('Altyazı referansı JSON gidiş-dönüşü yapılır', () {
+      final preferences = MediaPreferences(
+        subtitleLanguage: 'tr',
+        externalSubtitles: {
+          'episode1.mkv': const ExternalSubtitle(
+            path: '/cache/subtitles/101-e1.srt',
+            language: 'tr',
+          ),
+        },
+      );
+      final decoded = MediaPreferences.decodeOrDefault(preferences.encode());
+      expect(decoded.subtitleLanguage, 'tr');
+      expect(
+        decoded.externalSubtitles['episode1.mkv'],
+        const ExternalSubtitle(
+          path: '/cache/subtitles/101-e1.srt',
+          language: 'tr',
+        ),
+      );
+    });
 
-    final preferences = MediaPreferences(showChapters: false);
-    expect(preferences.showChapters, isFalse);
+    test('Şema v1 kayıtları yeni alanların varsayılanlarıyla okunur', () {
+      // OpenSubtitles alanlarından önce kaydedilmiş bir v1 tercihi.
+      const v1 = '{"schemaVersion":1,"subtitleColor":"#FFD54F",'
+          '"subtitleFont":"sans","subtitleScale":1.4}';
+      final decoded = MediaPreferences.decodeOrDefault(v1);
+      expect(decoded.subtitleColor, '#FFD54F');
+      expect(decoded.subtitleScale, 1.4);
+      expect(decoded.subtitleLanguage, isNull);
+      expect(decoded.externalSubtitles, isEmpty);
+    });
 
-    final decoded = MediaPreferences.decodeOrDefault(preferences.encode());
-    expect(decoded.showChapters, isFalse);
+    test('Bozuk altyazı girdileri sessizce atılır', () {
+      const encoded =
+          '{"schemaVersion":2,"subtitleLanguage":"tr",'
+          '"externalSubtitles":{'
+          '"ok.mkv":{"path":"/a.srt","language":"en"},'
+          // path eksik:
+          '"bad.mkv":{"language":"tr"},'
+          // boş path:
+          '"empty.mkv":{"path":"","language":"tr"}}}';
+      final decoded = MediaPreferences.decodeOrDefault(encoded);
+      expect(decoded.externalSubtitles.keys, ['ok.mkv']);
+      expect(
+        decoded.externalSubtitles['ok.mkv']!.path,
+        '/a.srt',
+      );
+      // Geçersiz dil kodu (ör. rakamlı) boş dizeye düşür; girdi düşmez.
+      const langless =
+          '{"schemaVersion":2,"externalSubtitles":{'
+          '"e.mkv":{"path":"/b.srt","language":"123"}}}';
+      final decodedLangless = MediaPreferences.decodeOrDefault(langless);
+      expect(decodedLangless.externalSubtitles['e.mkv']!.language, '');
+    });
 
-    final copied = preferences.copyWith(showChapters: true);
-    expect(copied.showChapters, isTrue);
-    expect(preferences.showChapters, isFalse);
-  });
+    test('subtitleLanguage geçersiz koddayse null olur', () {
+      expect(MediaPreferences(subtitleLanguage: 'TR').subtitleLanguage, 'tr');
+      expect(MediaPreferences(subtitleLanguage: 'xx').subtitleLanguage, 'xx');
+      expect(MediaPreferences(subtitleLanguage: 'twerking').subtitleLanguage,
+          isNull);
+      expect(MediaPreferences(subtitleLanguage: '').subtitleLanguage, isNull);
+    });
 
-  test('showChapters falls back to true when absent from JSON', () {
-    final decoded = MediaPreferences.decodeOrDefault(jsonEncode(<String, Object>{
-      'schemaVersion': MediaPreferences.schemaVersion,
-    }));
-
-    expect(decoded.showChapters, isTrue);
+    test('copyWithExternalSubtitle girdiyi ve dil tercihini günceller', () {
+      final base = MediaPreferences(
+        subtitleLanguage: 'tr',
+        externalSubtitles: {
+          'e1.mkv': const ExternalSubtitle(path: '/e1.srt', language: 'tr'),
+        },
+      );
+      final updated = base.copyWithExternalSubtitle(
+        entryName: 'e2.mkv',
+        subtitle: const ExternalSubtitle(path: '/e2.srt', language: 'de'),
+        language: 'de',
+      );
+      expect(updated.externalSubtitles.length, 2);
+      expect(updated.externalSubtitles['e1.mkv']!.path, '/e1.srt');
+      expect(updated.externalSubtitles['e2.mkv']!.language, 'de');
+      expect(updated.subtitleLanguage, 'de');
+      // Dil verilmeden yalnız association güncellenir.
+      final languageKept = updated.copyWithExternalSubtitle(
+        entryName: 'e3.mkv',
+        subtitle: const ExternalSubtitle(path: '/e3.srt', language: 'ar'),
+      );
+      expect(languageKept.subtitleLanguage, 'de');
+      expect(languageKept.externalSubtitles['e3.mkv']!.language, 'ar');
+    });
   });
 }

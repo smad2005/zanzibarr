@@ -1092,6 +1092,58 @@ void main() {
       expect(controller.dvReshapeStatus, DvReshapeStatus.failed);
     });
   });
+
+  group('addExternalSubtitle (OpenSubtitles)', () {
+    test('başlık ve dille mpv sub-add select komutu gönderir', () async {
+      final backend = _FakeBackend();
+      final controller = AdvancedPlaybackController(backend);
+
+      await controller.addExternalSubtitle(
+        '/cache/subtitles/101-dizi.srt',
+        title: 'Türkçe',
+        language: 'tr',
+      );
+
+      expect(backend.calls, [
+        'command:sub-add /cache/subtitles/101-dizi.srt select Türkçe tr',
+      ]);
+    });
+
+    test('yalnız başlıkla da çalışır (dil opsiyoneldir)', () async {
+      final backend = _FakeBackend();
+      final controller = AdvancedPlaybackController(backend);
+
+      await controller.addExternalSubtitle(
+        '/cache/subtitles/x.srt',
+        title: 'English',
+      );
+
+      expect(backend.calls, ['command:sub-add /cache/subtitles/x.srt select English']);
+    });
+
+    test('dil verildiğinde mpv konumsal sözleşmesi için boş başlık gönderir',
+        () async {
+      final backend = _FakeBackend();
+      final controller = AdvancedPlaybackController(backend);
+
+      await controller.addExternalSubtitle(
+        '/cache/subtitles/x.srt',
+        language: 'ar',
+      );
+
+      // mpv: sub-add <url> <flags> [<title> [<lang>]] — title boş, dil dolu.
+      expect(backend.calls, ['command:sub-add /cache/subtitles/x.srt select  ar']);
+    });
+
+    test('ikisi de verilmezse yalın SELECT gönderilir', () async {
+      final backend = _FakeBackend();
+      final controller = AdvancedPlaybackController(backend);
+
+      await controller.addExternalSubtitle('/cache/subtitles/x.srt');
+
+      expect(backend.calls, ['command:sub-add /cache/subtitles/x.srt select']);
+    });
+  });
 }
 
 /// DV gibi varlığı içerikle değişen özelliklerde gerçek libmpv davranışını

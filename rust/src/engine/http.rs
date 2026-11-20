@@ -149,14 +149,43 @@ pub async fn http_get(
     max_bytes: usize,
     timeout: Duration,
 ) -> Result<HttpResponse, HttpError> {
-    match tokio::time::timeout(timeout, http_get_inner(url, max_bytes)).await {
+    http_request("GET", url, &[], &[], max_bytes, timeout).await
+}
+
+/// İstek yöntemi + ek başlıklar + gövde tanımlayan genel HTTP isteği.
+///
+/// Yönlendirme kuralları (RFC 7231 izleyicisi davranış):
+/// - 301/302/303: sonraki istek GET'e düşer ve gövde atılır (tarayıcı
+///   uyumlu; POST'un yanıt akışına yönlenmesi bu kurala girer).
+/// - 307/308: yöntem ve gövde korunarak aynı istek yeniden gönderilir.
+///
+/// `extra_headers` varsayılan başlıkları isimle ezar (bkz. [`exchange_full`]).
+pub async fn http_request(
+    method: &str,
+    url: &str,
+    extra_headers: &[(&str, &str)],
+    body: &[u8],
+    max_bytes: usize,
+    timeout: Duration,
+) -> Result<HttpResponse, HttpError> {
+    match tokio::time::timeout(timeout, http_request_inner(method, url, extra_headers, body, max_bytes))
+        .await
+    {
         Ok(result) => result,
         Err(_) => Err(HttpError::Timeout),
     }
 }
 
-async fn http_get_inner(url: &str, max_bytes: usize) -> Result<HttpResponse, HttpError> {
+async fn http_request_inner(
+    method: &str,
+    url: &str,
+    extra_headers: &[(&str, &str)],
+    body: &[u8],
+    max_bytes: usize,
+) -> Result<HttpResponse, HttpError> {
     let mut current = url.to_string();
+    let mut method = method.to_string();
+    let mut body = body.to_vec();
     for _ in 0..=MAX_REDIRECTS {
         let parsed = parse_url(&current)?;
         let default_port = if parsed.https { 443 } else { 80 };
@@ -175,14 +204,43 @@ async fn http_get_inner(url: &str, max_bytes: usize) -> Result<HttpResponse, Htt
                 .connect(server_name, tcp)
                 .await
                 .map_err(|error| HttpError::Tls(error.to_string()))?;
-            exchange(&mut tls, &host_header, parsed.target, max_bytes).await?
+            exchange_full(
+                &mut tls,
+                &host_header,
+                parsed.target,
+                max_bytes,
+                &method,
+                extra_headers,
+                &body,
+            )
+            .await?
         } else {
             let mut plain = tcp;
-            exchange(&mut plain, &host_header, parsed.target, max_bytes).await?
+            exchange_full(
+                &mut plain,
+                &host_header,
+                parsed.target,
+                max_bytes,
+                &method,
+                extra_headers,
+                &body,
+            )
+            .await?
         };
 
         match response.status {
-            301 | 302 | 303 | 307 | 308 => {
+            301..=303 => {
+                let location = response
+                    .header("location")
+                    .ok_or(HttpError::Malformed("redirect has no Location"))?;
+                current = resolve_redirect(&parsed, location)?;
+                // Tarayıcı uyumlu: yönlendirmeden sonra istek GET'e düşer.
+                if method != "GET" {
+                    method = "GET".to_string();
+                    body.clear();
+                }
+            }
+            307 | 308 => {
                 let location = response
                     .header("location")
                     .ok_or(HttpError::Malformed("redirect has no Location"))?;
@@ -196,6 +254,7 @@ async fn http_get_inner(url: &str, max_bytes: usize) -> Result<HttpResponse, Htt
 
 /// Tek bağlantı üzerinde istek/yanıt turu. TLS'siz akışlarla da
 /// çalışabildiği için birim testleri `duplex` ile ağsız yapılır.
+#[cfg(test)]
 async fn exchange<S>(
     stream: &mut S,
     host_header: &str,
@@ -205,11 +264,61 @@ async fn exchange<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let request = format!(
-        "GET {target} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: {USER_AGENT}\r\n\
-         Accept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n"
-    );
+    exchange_full(stream, host_header, target, max_bytes, "GET", &[], &[])
+        .await
+}
+
+/// Ek başlıklarla ve gövdeyle istek turu ([`exchange`]ın genel hali).
+///
+/// `extra_headers` varsayılan başlıkları İSİMLE ezar (ör. başka bir
+/// `User-Agent`); gövdesi olan isteklere `Content-Length` otomatik eklenir.
+async fn exchange_full<S>(
+    stream: &mut S,
+    host_header: &str,
+    target: &str,
+    max_bytes: usize,
+    method: &str,
+    extra_headers: &[(&str, &str)],
+    body: &[u8],
+) -> Result<HttpResponse, HttpError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    // Başlık listesi: varsayılanlar + ezme/ekleme yapan ek başlıklar.
+    let mut headers: Vec<(String, String)> = vec![
+        ("User-Agent".into(), USER_AGENT.into()),
+        ("Accept".into(), "*/*".into()),
+        ("Accept-Encoding".into(), "identity".into()),
+        ("Connection".into(), "close".into()),
+    ];
+    if !body.is_empty() {
+        headers.push(("Content-Length".into(), body.len().to_string()));
+    }
+    for (name, value) in extra_headers {
+        if let Some(existing) = headers
+            .iter_mut()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+        {
+            existing.1 = value.to_string();
+        } else {
+            headers.push((name.to_string(), value.to_string()));
+        }
+    }
+
+    let mut request = format!("{method} {target} HTTP/1.1\r\nHost: {host_header}\r\n");
+    for (name, value) in &headers {
+        // Başlık enjeksiyonuna karşı ad/değer içinde satır sonu-barındırılmaz.
+        if name.contains('\r') || name.contains('\n') || value.contains('\r') || value.contains('\n')
+        {
+            return Err(HttpError::InvalidUrl("header contains newline"));
+        }
+        request.push_str(&format!("{name}: {value}\r\n"));
+    }
+    request.push_str("\r\n");
     stream.write_all(request.as_bytes()).await?;
+    if !body.is_empty() {
+        stream.write_all(body).await?;
+    }
     stream.flush().await?;
 
     let mut reader = BufReader::new(stream);
@@ -504,6 +613,64 @@ mod tests {
         server_task.await.unwrap();
     }
 
+    /// Gövde ve ek başlıklarla POST: tam istek metnini ham baytlarla okur ve
+    /// Content-Length / ek başlıkların taşındığını doğrular.
+    #[tokio::test]
+    async fn post_ek_basliklarla_govdeyi_tasir() {
+        let (mut client, server) = duplex(4096);
+        let server_task = tokio::spawn(async move {
+            let mut server = server;
+            let mut request = vec![0u8; 8192];
+            // Yanıt gelmeden önce istek tamamı yazılır: sonuca kadar oku.
+            let mut read = 0;
+            loop {
+                let n = server.read(&mut request[read..]).await.unwrap();
+                if n == 0 {
+                    break;
+                }
+                read += n;
+                if request[..read].ends_with(b"{\"a\":1}") {
+                    break;
+                }
+            }
+            server
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                .await
+                .unwrap();
+            server.shutdown().await.unwrap();
+            request[..read].to_vec()
+        });
+
+        let response = exchange_full(
+            &mut client,
+            "api.example",
+            "/api/v1/login",
+            1024,
+            "POST",
+            &[
+                ("Content-Type", "application/json"),
+                ("Api-Key", "gizli-anahtar"),
+                // Varsayılan User-Agent ezilmeli.
+                ("User-Agent", "Zanzibarr v1.9"),
+            ],
+            br#"{"a":1}"#,
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status, 200);
+        let request = server_task.await.unwrap();
+        let text = String::from_utf8_lossy(&request);
+        assert!(text.starts_with("POST /api/v1/login HTTP/1.1\r\nHost: api.example\r\n"));
+        assert!(text.contains("Content-Type: application/json\r\n"));
+        assert!(text.contains("Api-Key: gizli-anahtar\r\n"));
+        assert!(text.contains("User-Agent: Zanzibarr v1.9\r\n"));
+        assert!(!text.contains("User-Agent: zanzibarr/1.1"));
+        assert!(text.contains("Content-Length: 7\r\n"));
+        assert!(text.ends_with("\r\n\r\n{\"a\":1}"));
+        // Varsayılan başlıklar (Accept-Encoding) korunur.
+        assert!(text.contains("Accept-Encoding: identity\r\n"));
+    }
+
     #[tokio::test]
     async fn boyut_siniri_content_length_ile() {
         let (mut client, server) = duplex(4096);
@@ -558,6 +725,50 @@ mod tests {
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"ok");
         server.await.unwrap();
+    }
+
+    /// POST'a 302 gelirse izleyen istek tarayıcı kuralıyla GET'e düşer ve
+    /// gövde atılır (RFC 7231).
+    #[tokio::test]
+    async fn post_yonlendirmesi_istegi_gete_dusurur() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            // 1. istek: POST /gonder + gövde → 302.
+            let (mut conn, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 512];
+            let _ = conn.read(&mut buf).await.unwrap();
+            conn.write_all(
+                b"HTTP/1.1 302 Found\r\nLocation: /son\r\nContent-Length: 0\r\n\r\n",
+            )
+            .await
+            .unwrap();
+            // 2. istek: GET olmalı, gövde taşımamalı.
+            let (mut conn, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 512];
+            let n = conn.read(&mut request).await.unwrap();
+            let text = String::from_utf8_lossy(&request[..n]).into_owned();
+            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                .await
+                .unwrap();
+            text
+        });
+
+        let url = format!("http://127.0.0.1:{port}/gonder");
+        let response = http_request(
+            "POST",
+            &url,
+            &[("Content-Type", "application/json")],
+            br#"{"x":1}"#,
+            1024,
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status, 200);
+        let second = server.await.unwrap();
+        assert!(second.starts_with("GET /son HTTP/1.1\r\n"), "ikinci istek GET olmalı: {second}");
+        assert!(!second.contains("{\"x\":1}"), "gövdeler yeniden gönderilmemeli");
     }
 
     #[tokio::test]

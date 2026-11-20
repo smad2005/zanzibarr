@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'subtitle_fonts.dart';
@@ -156,6 +157,61 @@ class NormalizedVector2 {
   int get hashCode => Object.hash(x, y);
 }
 
+/// Bir giriş dosyasına ilişkilendirilmiş harici altyazı (OpenSubtitles
+/// indirmesi). Anahtar, oynatılan girdinin `StreamInfo.filename`'dır;
+/// bölümler arasında yanlış dosya yeniden kullanılmasın diye her girdi
+/// kendi altyazısını taşır.
+class ExternalSubtitle {
+  const ExternalSubtitle({required this.path, required this.language});
+
+  /// İndirilen altyazının mutlak dosya yolu (sır içermez).
+  final String path;
+
+  /// Altyazının ISO dil kodu ("tr", "en", …).
+  final String language;
+
+  Map<String, Object> toJson() => <String, Object>{
+    'path': path,
+    'language': language,
+  };
+
+  static ExternalSubtitle? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final path = value['path'];
+    final language = value['language'];
+    if (path is! String || language is! String) return null;
+    if (path.isEmpty) return null;
+    return ExternalSubtitle(
+      path: _sanitizePath(path),
+      language: _languageCodeOrNull(language) ?? '',
+    );
+  }
+
+  /// Yollar makul uzunlukta tutulur; yine de sır değildir (uygulama
+  /// önbelleğindeki bir dosyadır).
+  static String _sanitizePath(String path) {
+    final trimmed = path.trim();
+    if (trimmed.length > 1024) {
+      return trimmed.substring(trimmed.length - 1024);
+    }
+    return trimmed;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ExternalSubtitle && path == other.path && language == other.language;
+
+  @override
+  int get hashCode => Object.hash(path, language);
+}
+
+/// "Two/three-letter ISO-639 language code or null" validator, shared by
+/// [MediaPreferences] and [ExternalSubtitle].
+String? _languageCodeOrNull(String value) {
+  final code = value.trim().toLowerCase();
+  return RegExp(r'^[a-z]{2,3}$').hasMatch(code) ? code : null;
+}
+
 /// Non-secret, per-media playback preferences.
 ///
 /// The public constructor sanitizes every value before it can be persisted.
@@ -178,6 +234,8 @@ class MediaPreferences {
     String subtitleFont = kDefaultSubtitleFontId,
     double audioDelaySeconds = 0,
     bool showChapters = defaultShowChapters,
+    String? subtitleLanguage,
+    Map<String, ExternalSubtitle> externalSubtitles = const {},
   }) => MediaPreferences._(
     crop: crop,
     aspectRatio: _sanitizeAspectRatio(aspectRatio),
@@ -209,6 +267,10 @@ class MediaPreferences {
       0,
     ).clamp(-maximumDelaySeconds, maximumDelaySeconds).toDouble(),
     showChapters: showChapters,
+    subtitleLanguage: subtitleLanguage == null || subtitleLanguage.isEmpty
+        ? null
+        : _languageCodeOrNull(subtitleLanguage),
+    externalSubtitles: _sanitizeExternalSubtitles(externalSubtitles),
   );
 
   const MediaPreferences._({
@@ -228,13 +290,19 @@ class MediaPreferences {
     required this.subtitleFont,
     required this.audioDelaySeconds,
     required this.showChapters,
+    required this.subtitleLanguage,
+    required this.externalSubtitles,
   });
 
-  static const schemaVersion = 1;
+  /// Şema sürümü 2: `subtitleLanguage` + `externalSubtitles` alanları eklendi
+  /// (OpenSubtitles entegrasyonu). Sürüm 1 kayıtları yeni alanların
+  /// varsayılanlarıyla okunur — mevcut tercihler yükseltmede kaybolmaz.
+  static const schemaVersion = 2;
+  /// `decodeOrDefault` desteklediği en eski şema sürümü.
+  static const _oldestSupportedSchemaVersion = 1;
   static const minimumSeekStepSeconds = 1;
   static const maximumSeekStepSeconds = 600;
   static const defaultSeekStepSeconds = 1;
-  static const defaultShowChapters = true;
   static const minimumPeriodicInfoInterval = Duration(milliseconds: 250);
   static const maximumPeriodicInfoInterval = Duration(minutes: 1);
   static const defaultVideoPreset = 'auto';
@@ -248,6 +316,7 @@ class MediaPreferences {
   static const defaultSubtitlePosition = 100.0;
   static const maximumDelaySeconds = 600.0;
   static const defaultSubtitleColor = '#FFFFFF';
+  static const defaultShowChapters = true;
 
   static final RegExp _presetPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,31}$');
   static final RegExp _subtitleColorPattern = RegExp(r'^#[0-9a-fA-F]{6}$');
@@ -274,11 +343,97 @@ class MediaPreferences {
   final String subtitleFont;
   final double audioDelaySeconds;
 
+  /// Bölüm (chapter) işaretleri oynatıcıda gösterilsin mi; kalıcı tercih
+  /// `MediaPreferencesStore.loadShowChapters` ile okunur.
   final bool showChapters;
+
+  /// Bu içerik için kullanıcının seçtiği altyazı dili (ISO kodu). Kuyruğun
+  /// sonraki bölümlerinde otomatik altyazı araması bu dili kullanır;
+  /// seçim yapılmadıysa null.
+  final String? subtitleLanguage;
+
+  /// Girdi dosya adına (`StreamInfo.filename`) bağlanmış harici altyazılar
+  /// (OpenSubtitles indirmeleri). Bölüm açılırken dosya hâlâ diskteyse
+  /// ağa çıkılmadan yeniden yüklenir.
+  final Map<String, ExternalSubtitle> externalSubtitles;
 
   bool get periodicInfoEnabled => periodicInfoInterval != null;
 
   static MediaPreferences defaults() => MediaPreferences();
+
+  /// Altyazı ilişkilendirmesi güncellenmiş kopya: [entryName] girdisine
+  /// [subtitle] bağlanır ve [language] boş değilse içerik dil tercihi
+  /// ayrıca güncellenir. Kalan alanlar aynen taşınır.
+  MediaPreferences copyWithExternalSubtitle({
+    required String entryName,
+    required ExternalSubtitle subtitle,
+    String? language,
+  }) => MediaPreferences(
+    crop: crop,
+    aspectRatio: aspectRatio,
+    alignment: alignment,
+    pan: pan,
+    seekStepSeconds: seekStepSeconds,
+    periodicInfoInterval: periodicInfoInterval,
+    videoPreset: videoPreset,
+    audioPreset: audioPreset,
+    upscalePreset: upscalePreset,
+    subtitleScale: subtitleScale,
+    subtitlePosition: subtitlePosition,
+    subtitleDelaySeconds: subtitleDelaySeconds,
+    subtitleColor: subtitleColor,
+    subtitleFont: subtitleFont,
+    audioDelaySeconds: audioDelaySeconds,
+    showChapters: showChapters,
+    // language null'da mevcut dil tercihi korunur (yalnız altyazı güncelleme).
+    subtitleLanguage: language ?? subtitleLanguage,
+    externalSubtitles: {...externalSubtitles, entryName: subtitle},
+  );
+
+  /// Tüm alanların kopyası; verilmeyen alanlar mevcut değerden taşınır.
+  MediaPreferences copyWith({
+    NormalizedCropRect? crop,
+    double? aspectRatio,
+    NormalizedVector2? alignment,
+    NormalizedVector2? pan,
+    int? seekStepSeconds,
+    Duration? periodicInfoInterval,
+    String? videoPreset,
+    String? audioPreset,
+    String? upscalePreset,
+    double? subtitleScale,
+    double? subtitlePosition,
+    double? subtitleDelaySeconds,
+    String? subtitleColor,
+    String? subtitleFont,
+    double? audioDelaySeconds,
+    bool? showChapters,
+    String? subtitleLanguage,
+    Map<String, ExternalSubtitle>? externalSubtitles,
+  }) {
+    return MediaPreferences(
+      crop: crop ?? this.crop,
+      aspectRatio: aspectRatio ?? this.aspectRatio,
+      alignment: alignment ?? this.alignment,
+      pan: pan ?? this.pan,
+      seekStepSeconds: seekStepSeconds ?? this.seekStepSeconds,
+      periodicInfoInterval:
+          periodicInfoInterval ?? this.periodicInfoInterval,
+      videoPreset: videoPreset ?? this.videoPreset,
+      audioPreset: audioPreset ?? this.audioPreset,
+      upscalePreset: upscalePreset ?? this.upscalePreset,
+      subtitleScale: subtitleScale ?? this.subtitleScale,
+      subtitlePosition: subtitlePosition ?? this.subtitlePosition,
+      subtitleDelaySeconds:
+          subtitleDelaySeconds ?? this.subtitleDelaySeconds,
+      subtitleColor: subtitleColor ?? this.subtitleColor,
+      subtitleFont: subtitleFont ?? this.subtitleFont,
+      audioDelaySeconds: audioDelaySeconds ?? this.audioDelaySeconds,
+      showChapters: showChapters ?? this.showChapters,
+      subtitleLanguage: subtitleLanguage ?? this.subtitleLanguage,
+      externalSubtitles: externalSubtitles ?? this.externalSubtitles,
+    );
+  }
 
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
@@ -298,6 +453,10 @@ class MediaPreferences {
     'subtitleFont': subtitleFont,
     'audioDelaySeconds': audioDelaySeconds,
     'showChapters': showChapters,
+    'subtitleLanguage': subtitleLanguage,
+    'externalSubtitles': externalSubtitles.map(
+      (name, subtitle) => MapEntry(name, subtitle.toJson()),
+    ),
   };
 
   String encode() => jsonEncode(toJson());
@@ -305,10 +464,17 @@ class MediaPreferences {
   /// Returns defaults for malformed JSON, unsupported schema versions or
   /// structurally invalid values. Individual numeric values are sanitized by
   /// the public constructor.
+  ///
+  /// Sürüm 1 kayıtları (altyazı ilişkilendirmesinden önce) eksik alanların
+  /// varsayılanlarıyla okunur; hiçbir mevcut tercih düşmez.
   static MediaPreferences decodeOrDefault(String encoded) {
     try {
       final value = jsonDecode(encoded);
-      if (value is! Map || value['schemaVersion'] != schemaVersion) {
+      if (value is! Map) {
+        return defaults();
+      }
+      final version = value['schemaVersion'];
+      if (version != schemaVersion && version != _oldestSupportedSchemaVersion) {
         return defaults();
       }
 
@@ -319,6 +485,21 @@ class MediaPreferences {
           return defaults();
         }
         interval = Duration(milliseconds: intervalValue.toInt());
+      }
+
+      final subtitleLanguage = value['subtitleLanguage'];
+      final externalSubtitlesValue = value['externalSubtitles'];
+      Map<String, ExternalSubtitle> externalSubtitles = const {};
+      if (externalSubtitlesValue is Map) {
+        final parsed = <String, ExternalSubtitle>{};
+        for (final entry in externalSubtitlesValue.entries) {
+          if (entry.key is! String) continue;
+          final subtitle = ExternalSubtitle.fromJson(entry.value);
+          if (subtitle != null) {
+            parsed[entry.key as String] = subtitle;
+          }
+        }
+        externalSubtitles = parsed;
       }
 
       return MediaPreferences(
@@ -343,10 +524,10 @@ class MediaPreferences {
         subtitleColor: _stringOr(value['subtitleColor'], defaultSubtitleColor),
         subtitleFont: _stringOr(value['subtitleFont'], kDefaultSubtitleFontId),
         audioDelaySeconds: _numberOr(value['audioDelaySeconds'], 0),
-        showChapters: _boolOr(
-          value['showChapters'],
-          defaultShowChapters,
-        ),
+        showChapters: _boolOr(value['showChapters'], defaultShowChapters),
+        subtitleLanguage:
+            subtitleLanguage is String ? subtitleLanguage : null,
+        externalSubtitles: externalSubtitles,
       );
     } on FormatException {
       return defaults();
@@ -380,6 +561,20 @@ class MediaPreferences {
   static String _sanitizeSubtitleFont(String value) =>
       subtitleFontFor(value.trim()).id;
 
+  /// Anahtarlar boş olamaz; altyazı referanslarını tutan eşlem kopyası
+  /// (sabitleme değil) döner — widget'larda mutasyon kazaları istenmez.
+  static Map<String, ExternalSubtitle> _sanitizeExternalSubtitles(
+    Map<String, ExternalSubtitle> value,
+  ) {
+    final sanitized = <String, ExternalSubtitle>{};
+    for (final entry in value.entries) {
+      final name = entry.key.trim();
+      if (name.isEmpty || name.length > 512) continue;
+      sanitized[name] = entry.value;
+    }
+    return Map.unmodifiable(sanitized);
+  }
+
   @override
   bool operator ==(Object other) =>
       other is MediaPreferences &&
@@ -398,7 +593,10 @@ class MediaPreferences {
       subtitleColor == other.subtitleColor &&
       subtitleFont == other.subtitleFont &&
       audioDelaySeconds == other.audioDelaySeconds &&
-      showChapters == other.showChapters;
+      showChapters == other.showChapters &&
+      subtitleLanguage == other.subtitleLanguage &&
+      // Map == kimlik karşılaştırır; içerik karşılaştırması gerekir.
+      mapEquals(externalSubtitles, other.externalSubtitles);
 
   @override
   int get hashCode => Object.hash(
@@ -418,47 +616,9 @@ class MediaPreferences {
     subtitleFont,
     audioDelaySeconds,
     showChapters,
+    subtitleLanguage,
+    externalSubtitles,
   );
-
-  MediaPreferences copyWith({
-    NormalizedCropRect? crop,
-    double? aspectRatio,
-    NormalizedVector2? alignment,
-    NormalizedVector2? pan,
-    int? seekStepSeconds,
-    Duration? periodicInfoInterval,
-    String? videoPreset,
-    String? audioPreset,
-    String? upscalePreset,
-    double? subtitleScale,
-    double? subtitlePosition,
-    double? subtitleDelaySeconds,
-    String? subtitleColor,
-    String? subtitleFont,
-    double? audioDelaySeconds,
-    bool? showChapters,
-  }) {
-    return MediaPreferences(
-      crop: crop ?? this.crop,
-      aspectRatio: aspectRatio ?? this.aspectRatio,
-      alignment: alignment ?? this.alignment,
-      pan: pan ?? this.pan,
-      seekStepSeconds: seekStepSeconds ?? this.seekStepSeconds,
-      periodicInfoInterval:
-          periodicInfoInterval ?? this.periodicInfoInterval,
-      videoPreset: videoPreset ?? this.videoPreset,
-      audioPreset: audioPreset ?? this.audioPreset,
-      upscalePreset: upscalePreset ?? this.upscalePreset,
-      subtitleScale: subtitleScale ?? this.subtitleScale,
-      subtitlePosition: subtitlePosition ?? this.subtitlePosition,
-      subtitleDelaySeconds:
-          subtitleDelaySeconds ?? this.subtitleDelaySeconds,
-      subtitleColor: subtitleColor ?? this.subtitleColor,
-      subtitleFont: subtitleFont ?? this.subtitleFont,
-      audioDelaySeconds: audioDelaySeconds ?? this.audioDelaySeconds,
-      showChapters: showChapters ?? this.showChapters,
-    );
-  }
 }
 
 /// Persists [MediaPreferences] under a path-free per-media namespace.
@@ -523,7 +683,6 @@ class MediaPreferencesStore {
 
   Future<void> saveShowChapters(bool value) =>
       _storage.write(showChaptersKey, '$value');
-}
 
 double _finiteOr(double value, double fallback) =>
     value.isFinite ? value : fallback;
@@ -537,6 +696,8 @@ double? _finiteNumber(Object? value) {
 double _numberOr(Object? value, double fallback) =>
     _finiteNumber(value) ?? fallback;
 
+bool _boolOr(Object? value, bool fallback) => value is bool ? value : fallback;
+
 int _integerOr(Object? value, int fallback) {
   if (value is! num || !value.toDouble().isFinite) return fallback;
   return value.toInt();
@@ -544,5 +705,3 @@ int _integerOr(Object? value, int fallback) {
 
 String _stringOr(Object? value, String fallback) =>
     value is String ? value : fallback;
-
-bool _boolOr(Object? value, bool fallback) => value is bool ? value : fallback;

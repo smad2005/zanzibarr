@@ -954,6 +954,29 @@ class AdvancedPlaybackController {
     subtitleFont = font.id;
   }
 
+  /// Oynatılan medyaya harici altyazı dosyası ekler ve seçer (mpv
+  /// `sub-add <url> select [title [lang]]`). Dosya zaten diskte olmalıdır
+  /// (OpenSubtitles indirmesi app destek dizinine yazılır); akış
+  /// yeniden açılmaz, oynatma kesilmez.
+  ///
+  /// [title] iz etiketini (dil adı gibi), [language] mpv'in iz dili olarak
+  /// taşıyacağı ISO kodudur; ikisi de opsiyoneldir ama mpv konumsal
+  /// argüman gerektirir: language verilirse title da verilmelidir.
+  Future<void> addExternalSubtitle(
+    String path, {
+    String? title,
+    String? language,
+  }) async {
+    final arguments = <String>['sub-add', path, 'select'];
+    if (title != null || language != null) {
+      arguments.add(title ?? '');
+    }
+    if (language != null) {
+      arguments.add(language);
+    }
+    await _backend.command(arguments);
+  }
+
   Future<void> setAudioDelay(Duration value) async {
     _requireDurationRange(value, maximumAudioDelay, 'Ses gecikmesi');
     await _backend.setProperty('audio-delay', _seconds(value));

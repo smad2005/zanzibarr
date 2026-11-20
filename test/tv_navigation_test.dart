@@ -194,10 +194,11 @@ void main() {
         isTrue,
         reason: 'port/bağlantı sınırı çiftinden biri: $stops',
       );
-      // İki boş indexer alanı (URL + API anahtarı) da dolaşılmış olmalı.
+      // Boş indexer alanları (URL + API anahtarı) VE boş OpenSubtitles
+      // alanları (URL, anahtar, kullanıcı, parola) dolaşılmış olmalı.
       // Ardışık aynı etiketler stops'ta tekilleştiği için ham adımlarda
       // sayılır: zincir "alan: → alan:" diye iniyor.
-      expect(steps.where((step) => step == 'alan:').length, 2);
+      expect(steps.where((step) => step == 'alan:').length, 6);
     });
 
     testWidgets('yan yana alanlar arasında sol/sağ ok gezer', (tester) async {

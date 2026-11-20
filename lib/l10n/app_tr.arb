@@ -293,5 +293,27 @@
     }
   },
   "searchHealthNoPar2": "Bu yayında PAR2 onarım verisi yok",
-  "searchHealthMissingVolumes": "NZB listesinde bazı arşiv ciltleri eksik"
+  "searchHealthMissingVolumes": "NZB listesinde bazı arşiv ciltleri eksik",
+  "subtitleSearchTooltip": "Altyazıları çevrimiçi ara",
+  "subtitleSearchTitle": "OpenSubtitles",
+  "subtitleSearching": "Aranıyor…",
+  "subtitleSearchNoResults": "Bu yayın için altyazı bulunamadı.",
+  "subtitleSearchPickLanguage": "En az bir dil seçin.",
+  "subtitleSearchFailed": "Altyazı araması başarısız.",
+  "subtitleSearchMatch": "Dosya eşleşmesi",
+  "subtitleSearchDownloads": "{count} indirme",
+"@subtitleSearchDownloads": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "subtitleSearchMissingSettings": "Altyazı aramak için Ayarlar'dan OpenSubtitles API anahtarını ekleyin.",
+  "subtitleSearchClose": "Kapat",
+  "settingsOsSectionTitle": "OpenSubtitles",
+  "settingsOsSectionSubtitle": "İsteğe bağlı — oynatıcıya çevrimiçi altyazı araması (OpenSubtitles) ekler. opensubtitles.com'da ücretsiz hesap açıp Profil → API consumers bölümünden bir API anahtarı oluşturun. Hesabınızla giriş yapmak günlük indirme kotanızı yükseltir.",
+  "settingsOsUrlLabel": "API kök adresi",
+  "settingsOsApiKeyLabel": "OpenSubtitles API anahtarı",
+  "settingsOsUsernameLabel": "Kullanıcı adı (isteğe bağlı)",
+  "settingsOsPasswordLabel": "Parola (isteğe bağlı)",
+  "settingsOsSaveLabel": "Altyazı ayarlarını kaydet"
 }

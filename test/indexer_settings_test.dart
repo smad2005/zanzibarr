@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zanzibarr/settings/indexer_settings.dart';
+import 'package:zanzibarr/settings/opensubtitles_settings.dart';
 import 'package:zanzibarr/settings/provider_settings.dart';
 import 'package:zanzibarr/settings/settings_screen.dart';
 import 'package:zanzibarr/src/rust/api/search.dart';
@@ -70,6 +71,18 @@ Future<void> _reveal(WidgetTester tester, Finder finder) async {
   );
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
+}
+
+
+/// OpenSubtitles bölümü: bellek içi sahte depoyla sınanır.
+class _FakeOpenSubtitlesStore extends OpenSubtitlesSettingsStore {
+  OpenSubtitlesSettings saved = const OpenSubtitlesSettings();
+
+  @override
+  Future<OpenSubtitlesSettings> load() async => saved;
+
+  @override
+  Future<void> save(OpenSubtitlesSettings settings) async => saved = settings;
 }
 
 void main() {
@@ -266,6 +279,71 @@ void main() {
 
       expect(capsConfig?.baseUrl, 'https://indexer.example');
       expect(find.text('Bağlandı: Miatrix'), findsOneWidget);
+    });
+  });
+  group('SettingsScreen OpenSubtitles bolumu', () {
+    testWidgets('bolum gorunur, kimlik bilgileri kaydedilir', (tester) async {
+      final store = _FakeOpenSubtitlesStore();
+      await tester.pumpWithL10n(
+        SettingsScreen(
+          store: _FakeProviderStore(),
+          indexerStore: _FakeIndexerStore(),
+          osStore: store,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _reveal(tester, find.text('OpenSubtitles'));
+      expect(find.text('OpenSubtitles'), findsOneWidget);
+      expect(find.text('OpenSubtitles API anahtarı'), findsOneWidget);
+      expect(find.text('Kullanıcı adı (isteğe bağlı)'), findsOneWidget);
+
+      await _reveal(
+        tester,
+        find.widgetWithText(TextFormField, 'OpenSubtitles API anahtarı'),
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'OpenSubtitles API anahtarı'),
+        'os-anahtari',
+      );
+      await _reveal(tester, find.text('Altyazı ayarlarını kaydet'));
+      await tester.tap(find.text('Altyazı ayarlarını kaydet'));
+      await tester.pumpAndSettle();
+
+      expect(store.saved.apiKey, 'os-anahtari');
+      expect(store.saved.canSearch, isTrue);
+      expect(store.saved.languages, OpenSubtitlesSettings.defaultLanguages);
+      expect(find.text('Ayarlar güvenli depoya kaydedildi.'), findsOneWidget);
+    });
+
+    testWidgets('gecersiz URL kaydi engelliyor', (tester) async {
+      final store = _FakeOpenSubtitlesStore();
+      await tester.pumpWithL10n(
+        SettingsScreen(
+          store: _FakeProviderStore(),
+          indexerStore: _FakeIndexerStore(),
+          osStore: store,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _reveal(
+        tester,
+        find.widgetWithText(TextFormField, 'API kök adresi'),
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'API kök adresi'),
+        'ftp://api.example.com',
+      );
+      await _reveal(tester, find.text('Altyazı ayarlarını kaydet'));
+      await tester.tap(find.text('Altyazı ayarlarını kaydet'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('http:// veya https:// ile başlayan geçerli bir URL girin'),
+        findsOneWidget,
+      );
+      expect(store.saved.canSearch, isFalse);
     });
   });
 }

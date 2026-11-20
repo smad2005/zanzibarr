@@ -21,6 +21,7 @@ class SubtitleControlsOverlay extends StatefulWidget {
     required this.onFontChanged,
     required this.onTrackSelected,
     required this.onClose,
+    this.onSearchSubtitles,
   });
 
   final double scale;
@@ -39,6 +40,10 @@ class SubtitleControlsOverlay extends StatefulWidget {
   final ValueChanged<String> onFontChanged;
   final ValueChanged<SubtitleTrack> onTrackSelected;
   final VoidCallback onClose;
+
+  /// OpenSubtitles altyazı aramasını açar; null ise düğme gösterilmez
+  /// (ör. Ayarlar'da anahtar girilmemiş olabilir — oynatıcı kararı).
+  final VoidCallback? onSearchSubtitles;
 
   @override
   State<SubtitleControlsOverlay> createState() =>
@@ -248,6 +253,14 @@ class _SubtitleControlsOverlayState extends State<SubtitleControlsOverlay> {
                         selected: widget.font,
                         onSelected: widget.onFontChanged,
                       ),
+                      if (widget.onSearchSubtitles != null) ...[
+                        const _Divider(),
+                        _OverlayButton(
+                          icon: Icons.travel_explore_rounded,
+                          tooltip: l10n.subtitleSearchTooltip,
+                          onPressed: widget.onSearchSubtitles!,
+                        ),
+                      ],
                       const _Divider(),
                       _OverlayButton(
                         icon: Icons.close_rounded,
