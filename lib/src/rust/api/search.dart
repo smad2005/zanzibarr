@@ -4,9 +4,11 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
+import 'easynews.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `download_dir_path`, `fetch_checked`, `map_http_error`, `sanitize_filename`
+// These functions are ignored because they are not marked as `pub`: `download_dir_path`, `fetch_checked_async`, `fetch_checked`, `item_to_dto`, `map_http_error`, `run_indexer_search`, `sanitize_filename`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SourceOutcome`
 
 /// Indexer'ın yeteneklerini sorgular (`?t=caps`). Bağlantı ve API anahtarı
 /// doğrulaması için de kullanılır.
@@ -22,6 +24,35 @@ Future<SearchPageDto> newznabSearch({
   required int offset,
 }) => RustLib.instance.api.crateApiSearchNewznabSearch(
   config: config,
+  query: query,
+  limit: limit,
+  offset: offset,
+);
+
+/// Cok kaynakli arama (roadmap #4/#5): Newznab indexer VE Easynews web
+/// aramasi ayni sorguyla, paralel sorgulanir; sonuclar tekillestirilip
+/// birlestirilir.
+///
+/// Kaynak kurallari:
+/// - `indexer` yalniz URL + anahtar doluysa sorgulanir; `easynews` yalniz
+///   kullanici adi + parola doluysa. `None` veya eksik yapilandirma o
+///   kaynagi aramaya katmaz.
+/// - Iki kaynak da devre disiysa hata doner (UI "kaynak yok" gorunumu).
+/// - Kaynaklardan biri hata verirse digerinin sonuclari donebilir (sessiz
+///   kismi basari); hicbiri basarili degilse ilk hata tasinir.
+/// - Ayni release iki kaynakta da varsa `dedup_items` ilk (indexer)
+///   kopyasini tutar; `source` alani tutulan kopyanin kokenini soyler.
+/// - "Toplam" sayisi yalniz tek kaynagin sonuclari anlamlysa doner; karma
+///   listede `None`dir (UI gizler).
+Future<SearchPageDto> searchSources({
+  IndexerConfigDto? indexer,
+  EasynewsConfigDto? easynews,
+  required String query,
+  required int limit,
+  required int offset,
+}) => RustLib.instance.api.crateApiSearchSearchSources(
+  indexer: indexer,
+  easynews: easynews,
   query: query,
   limit: limit,
   offset: offset,
@@ -117,6 +148,9 @@ class SearchItemDto {
   final int? year;
   final String? group;
 
+  /// Sonucun geldiği kaynak: "indexer" (Newznab) | "easynews".
+  final String source;
+
   const SearchItemDto({
     required this.title,
     required this.nzbUrl,
@@ -129,6 +163,7 @@ class SearchItemDto {
     this.episode,
     this.year,
     this.group,
+    required this.source,
   });
 
   @override
@@ -143,7 +178,8 @@ class SearchItemDto {
       season.hashCode ^
       episode.hashCode ^
       year.hashCode ^
-      group.hashCode;
+      group.hashCode ^
+      source.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -160,7 +196,8 @@ class SearchItemDto {
           season == other.season &&
           episode == other.episode &&
           year == other.year &&
-          group == other.group;
+          group == other.group &&
+          source == other.source;
 }
 
 class SearchPageDto {

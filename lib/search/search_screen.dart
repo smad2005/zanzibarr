@@ -9,24 +9,38 @@ import '../settings/indexer_settings.dart';
 import '../settings/provider_settings.dart';
 import '../settings/settings_screen.dart';
 import '../settings/ui_preferences.dart';
+import '../src/rust/api/easynews.dart' show EasynewsConfigDto, easynewsDownloadNzb;
 import '../src/rust/api/health.dart' show NzbHealthDto, checkNzbHealth;
 import '../src/rust/api/search.dart';
 import '../src/rust/api/streaming.dart' show ProviderConfigDto;
 import '../tv_focus.dart';
 
-/// FRB `newznabSearch` imzası; testlerde sahte enjekte edilebilir.
-typedef NewznabSearchFn =
-    Future<SearchPageDto> Function(
-      IndexerConfigDto config,
-      String query,
-      int limit,
-      int offset,
-    );
+/// Arama sonucunun geldiği kaynak (motor tarafıyla aynı sabitler).
+const kSearchSourceIndexer = 'indexer';
+const kSearchSourceEasynews = 'easynews';
+
+/// FRB `searchSources` imzası; testlerde sahte enjekte edilebilir.
+typedef MultiSourceSearchFn =
+    Future<SearchPageDto> Function({
+      IndexerConfigDto? indexer,
+      EasynewsConfigDto? easynews,
+      required String query,
+      required int limit,
+      required int offset,
+    });
 
 /// FRB `newznabDownloadNzb` imzası; testlerde sahte enjekte edilebilir.
 typedef NewznabDownloadFn =
     Future<String> Function(
       IndexerConfigDto config,
+      String nzbUrl,
+      String suggestedName,
+    );
+
+/// FRB `easynewsDownloadNzb` imzası; testlerde sahte enjekte edilebilir.
+typedef EasynewsDownloadFn =
+    Future<String> Function(
+      EasynewsConfigDto config,
       String nzbUrl,
       String suggestedName,
     );
@@ -47,6 +61,7 @@ class SearchScreen extends StatefulWidget {
     this.store,
     this.searchFn,
     this.downloadFn,
+    this.easynewsDownloadFn,
     this.onDownloaded,
     this.uiPreferences,
     this.providerStore,
@@ -56,11 +71,14 @@ class SearchScreen extends StatefulWidget {
   /// Testlerde sahte depo enjekte edebilmek için; null ise gerçek depo kullanılır.
   final IndexerSettingsStore? store;
 
-  /// Null ise FRB `newznabSearch` kullanılır.
-  final NewznabSearchFn? searchFn;
+  /// Null ise FRB `searchSources` kullanılır (indexer + Easynews birleşik).
+  final MultiSourceSearchFn? searchFn;
 
   /// Null ise FRB `newznabDownloadNzb` kullanılır.
   final NewznabDownloadFn? downloadFn;
+
+  /// Null ise FRB `easynewsDownloadNzb` kullanılır.
+  final EasynewsDownloadFn? easynewsDownloadFn;
 
   /// İndirme bitince çağrılır; null ise [PlayerScreen]'e push edilir.
   /// Testlerde oynatıcının native çağrılarını atlamak için kullanılır.
@@ -89,9 +107,11 @@ class _SearchScreenState extends State<SearchScreen> {
       widget.store ?? IndexerSettingsStore();
   late final ProviderSettingsStore _providerStore =
       widget.providerStore ?? ProviderSettingsStore();
-  late final NewznabSearchFn _searchFn = widget.searchFn ?? _defaultSearch;
+  late final MultiSourceSearchFn _searchFn = widget.searchFn ?? _defaultSearch;
   late final NewznabDownloadFn _downloadFn =
       widget.downloadFn ?? _defaultDownload;
+  late final EasynewsDownloadFn _easynewsDownloadFn =
+      widget.easynewsDownloadFn ?? _defaultEasynewsDownload;
   late final NzbHealthFn _healthFn = widget.healthFn ?? _defaultHealth;
 
   final _queryController = TextEditingController();
@@ -103,6 +123,11 @@ class _SearchScreenState extends State<SearchScreen> {
   IndexerSettings _settings = const IndexerSettings();
   ProviderSettings _providerSettings = const ProviderSettings();
   bool _loadingSettings = true;
+
+  /// Sağlayıcı Easynews ise web araması için türetilen yapılandırma;
+  /// sağlayıcı easynews.com'un alt alanı DEĞİLSE null (Ek ayar yok —
+  /// members.easynews.com aynı NNTP hesabına bakar).
+  EasynewsConfigDto? _easynewsConfig;
 
   List<SearchItemDto>? _items;
   int? _total;
@@ -128,17 +153,43 @@ class _SearchScreenState extends State<SearchScreen> {
   /// aynı küçük dosya yeniden indirilmez.
   final Map<int, String> _downloadedPaths = {};
 
-  static Future<SearchPageDto> _defaultSearch(
-    IndexerConfigDto config,
-    String query,
-    int limit,
-    int offset,
-  ) => newznabSearch(config: config, query: query, limit: limit, offset: offset);
+  static Future<SearchPageDto> _defaultSearch({
+    IndexerConfigDto? indexer,
+    EasynewsConfigDto? easynews,
+    required String query,
+    required int limit,
+    required int offset,
+  }) => searchSources(
+    indexer: indexer,
+    easynews: easynews,
+    query: query,
+    limit: limit,
+    offset: offset,
+  );
 
   static Future<NzbHealthDto> _defaultHealth(
     ProviderConfigDto config,
     String nzbPath,
   ) => checkNzbHealth(config: config, nzbPath: nzbPath);
+
+  /// Sağlayıcı adından Easynews web arama yapılandırması türetir:
+  /// host `easynews.com` veya `*.easynews.com` ise ve NNTP kimlik bilgileri
+  /// doluysa aynı hesapla web araması açılır; aksi hâlde null.
+  static EasynewsConfigDto? _deriveEasynewsConfig(ProviderSettings provider) {
+    final host = provider.host.trim().toLowerCase();
+    final isEasynews = host == 'easynews.com' || host.endsWith('.easynews.com');
+    if (!isEasynews) return null;
+    if (provider.username.trim().isEmpty || provider.password.isEmpty) {
+      return null;
+    }
+    return EasynewsConfigDto(
+      // Bazı bölgelerde engellenirse ayarlardan değiştirilebilir; boş URL
+      // motor tarafında varsayılana (members.easynews.com) düşer.
+      baseUrl: '',
+      username: provider.username,
+      password: provider.password,
+    );
+  }
 
   static Future<String> _defaultDownload(
     IndexerConfigDto config,
@@ -150,6 +201,20 @@ class _SearchScreenState extends State<SearchScreen> {
     // Masaüstünde de aynı dizin kullanılır (izin gerektirmez).
     final cacheDir = await getTemporaryDirectory();
     return newznabDownloadNzb(
+      config: config,
+      nzbUrl: nzbUrl,
+      suggestedName: suggestedName,
+      downloadDir: cacheDir.path,
+    );
+  }
+
+  static Future<String> _defaultEasynewsDownload(
+    EasynewsConfigDto config,
+    String nzbUrl,
+    String suggestedName,
+  ) async {
+    final cacheDir = await getTemporaryDirectory();
+    return easynewsDownloadNzb(
       config: config,
       nzbUrl: nzbUrl,
       suggestedName: suggestedName,
@@ -196,6 +261,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _settings = indexer;
       _providerSettings = provider;
+      _easynewsConfig = _deriveEasynewsConfig(provider);
       _loadingSettings = false;
     });
   }
@@ -205,15 +271,25 @@ class _SearchScreenState extends State<SearchScreen> {
     apiKey: _settings.apiKey,
   );
 
+  /// Indexer yapılandırması hazır mı (hazır olmayan kaynak aramaya katılmaz).
+  bool get _indexerReady => _settings.isComplete;
+
   Future<void> _search() async {
     final query = _queryController.text.trim();
     if (query.isEmpty || _searching) return;
+    if (!_indexerReady && _easynewsConfig == null) return;
     setState(() {
       _searching = true;
       _error = null;
     });
     try {
-      final page = await _searchFn(_config, query, _pageSize, 0);
+      final page = await _searchFn(
+        indexer: _indexerReady ? _config : null,
+        easynews: _easynewsConfig,
+        query: query,
+        limit: _pageSize,
+        offset: 0,
+      );
       if (!mounted) return;
       // Yeni sonuç kümesi: eski ön kontrol durumları ve indirilmiş NZB
       // yolları geçersiz; tarama yeni kuşakla başlar.
@@ -253,6 +329,19 @@ class _SearchScreenState extends State<SearchScreen> {
   ///   kalan kartlarda rozet çıkmaz.
   /// - Yeni arama/temizleme kuşağı geçersiz kılarsa bekleyen adımlar
   ///   sonuç uygulamaz.
+  /// Sonucun NZB'sini indirir: kaynak Easynews'te `dl-nzb` POST'u, indexer'da
+  /// klasik NZB bağlantısı. Sağlık ön kontrolü ve oynatma aynı yolu kullanır.
+  Future<String> _downloadItemNzb(SearchItemDto item) async {
+    if (item.source == kSearchSourceEasynews) {
+      final easynewsConfig = _easynewsConfig;
+      if (easynewsConfig == null) {
+        throw StateError('Easynews yapılandırması olmadan Easynews sonucu');
+      }
+      return _easynewsDownloadFn(easynewsConfig, item.nzbUrl, item.title);
+    }
+    return _downloadFn(_config, item.nzbUrl, item.title);
+  }
+
   Future<void> _startHealthSweep(int generation) async {
     final items = _items;
     if (items == null || items.isEmpty) return;
@@ -278,7 +367,7 @@ class _SearchScreenState extends State<SearchScreen> {
         // kullanılır (yeniden indirme yok).
         var path = _downloadedPaths[index];
         if (path == null) {
-          path = await _downloadFn(_config, item.nzbUrl, item.title);
+          path = await _downloadItemNzb(item);
           if (!mounted || generation != _healthGeneration) return;
           _downloadedPaths[index] = path;
         }
@@ -301,8 +390,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _busyIndex = index);
     try {
       // Ön kontrol aynı NZB'yi zaten indirdiyse yol yeniden kullanılır.
-      final path = _downloadedPaths[index] ??
-          await _downloadFn(_config, item.nzbUrl, item.title);
+      final path = _downloadedPaths[index] ?? await _downloadItemNzb(item);
       if (!mounted) return;
       _downloadedPaths[index] = path;
       final onDownloaded = widget.onDownloaded;
@@ -430,7 +518,9 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       );
     }
-    if (!_settings.isComplete) {
+    // Hiçbir arama kaynağı yoksa (indexer da Easynews de hazır değilse)
+    // yönlendirme görünümü; tek kaynak hazırken arama yapılabilir.
+    if (!_indexerReady && _easynewsConfig == null) {
       return _IndexerMissing(onOpenSettings: _openSettings);
     }
     if (_searching) {
@@ -723,6 +813,31 @@ class _SearchResultCardState extends State<_SearchResultCard> {
                             _HealthChecking() => _healthPendingChip(context),
                             _ => const SizedBox.shrink(),
                           },
+                          // Kaynak etiketi: Easynews sonuçlarında açık; indexer
+                          // sonuçları (ana akım) etiketsiz kalır.
+                          if (item.source == kSearchSourceEasynews)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: accent.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                'Easynews',
+                                style: TextStyle(
+                                  color: accent.withValues(alpha: 0.85),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
                           for (final badge in item.badges)
                             Container(
                               padding: const EdgeInsets.symmetric(

@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zanzibarr/search/search_screen.dart';
 import 'package:zanzibarr/settings/indexer_settings.dart';
 import 'package:zanzibarr/settings/provider_settings.dart';
+import 'package:zanzibarr/src/rust/api/easynews.dart'
+    show EasynewsConfigDto;
 import 'package:zanzibarr/src/rust/api/health.dart';
 import 'package:zanzibarr/src/rust/api/search.dart';
 import 'package:zanzibarr/src/rust/api/streaming.dart' show ProviderConfigDto;
@@ -46,6 +48,7 @@ final _completeProviderStore = _FakeProviderStore(
 
 SearchItemDto _movieItem() => SearchItemDto(
   title: 'Bir.Film.2024.2160p.WEB-DL.DV.HEVC-GRP',
+  source: 'indexer',
   nzbUrl: 'https://indexer.example/getnzb/1',
   sizeBytes: BigInt.from(6979321856), // 6,5 GB
   publishedEpochSecs:
@@ -58,6 +61,7 @@ SearchItemDto _movieItem() => SearchItemDto(
 
 SearchItemDto _tvItem() => SearchItemDto(
   title: 'Bir.Dizi.S01E02.1080p.WEB-GRP',
+  source: 'indexer',
   nzbUrl: 'https://indexer.example/getnzb/2',
   sizeBytes: BigInt.from(734003200), // 700 MB
   badges: const ['1080p'],
@@ -67,12 +71,41 @@ SearchItemDto _tvItem() => SearchItemDto(
 );
 
 /// Sabit iki sonuç döndüren sahte arama.
-Future<SearchPageDto> _fakeSearch(
-  IndexerConfigDto config,
-  String query,
-  int limit,
-  int offset,
-) async => SearchPageDto(total: BigInt.from(2), items: [_movieItem(), _tvItem()]);
+Future<SearchPageDto> _fakeSearch({
+  IndexerConfigDto? indexer,
+  EasynewsConfigDto? easynews,
+  required String query,
+  required int limit,
+  required int offset,
+}) async => SearchPageDto(total: BigInt.from(2), items: [_movieItem(), _tvItem()]);
+
+
+/// Sağlayıcı Easynews olduğunda web araması bu kimliklerle açılır.
+final _easynewsProviderStore = _FakeProviderStore(
+  const ProviderSettings(
+    host: 'secure-eu.news.easynews.com',
+    username: 'kullanici',
+    password: 'TESTPASS123',
+    maxConnections: 12,
+  ),
+);
+
+SearchItemDto _easynewsItem() => SearchItemDto(
+  title: 'Film.2024.1080p.WEB-DL-GRP',
+  nzbUrl: 'easynews:h1|Film.2024.1080p.WEB-DL-GRP.mkv|sig',
+  sizeBytes: BigInt.from(1610612736),
+  badges: const ['1080p'],
+  mediaKind: 'movie',
+  source: 'easynews',
+);
+
+Future<SearchPageDto> _fakeEasynewsSearch({
+  IndexerConfigDto? indexer,
+  EasynewsConfigDto? easynews,
+  required String query,
+  required int limit,
+  required int offset,
+}) async => SearchPageDto(total: BigInt.from(1), items: [_easynewsItem()]);
 
 Future<void> _enterQueryAndSearch(WidgetTester tester, String query) async {
   await tester.enterText(find.byType(TextField), query);
@@ -171,7 +204,7 @@ void main() {
     await tester.pumpWithL10n(
       SearchScreen(
         store: _completeStore,
-        searchFn: (config, query, limit, offset) async =>
+        searchFn: ({indexer, easynews, required query, required limit, required offset}) async =>
             throw Exception('Indexer yanıt vermiyor'),
       ),
     );
@@ -186,7 +219,7 @@ void main() {
     await tester.pumpWithL10n(
       SearchScreen(
         store: _completeStore,
-        searchFn: (config, query, limit, offset) async =>
+        searchFn: ({indexer, easynews, required query, required limit, required offset}) async =>
             SearchPageDto(total: BigInt.zero, items: const []),
       ),
     );
@@ -461,6 +494,154 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Eksik'), findsNothing);
       expect(find.text('İyi'), findsNWidgets(2));
+    });
+  });
+
+  group('Cok kaynakli arama (Easynews web arama + dedup)', () {
+    testWidgets('saglayici Easynews ise web arama yapilandirmasi turetilir', (
+      tester,
+    ) async {
+      IndexerConfigDto? gotIndexer;
+      EasynewsConfigDto? gotEasynews;
+      await tester.pumpWithL10n(
+        SearchScreen(
+          store: _completeStore,
+          providerStore: _easynewsProviderStore,
+          searchFn: ({
+            indexer,
+            easynews,
+            required query,
+            required limit,
+            required offset,
+          }) async {
+            gotIndexer = indexer;
+            gotEasynews = easynews;
+            return _fakeSearch(
+              indexer: indexer,
+              easynews: easynews,
+              query: query,
+              limit: limit,
+              offset: offset,
+            );
+          },
+          // Örnek kontrol taraması NZB indireceği için sahte yol enjekte
+          // edilir (gerçek FRB köprüsü test ortamında asılı kalır).
+          downloadFn: (config, nzbUrl, suggestedName) async => '/tmp/a.nzb',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _enterQueryAndSearch(tester, 'film');
+
+      // Indexer VE Easynews ayni aramaya tasinir.
+      expect(gotIndexer?.baseUrl, 'https://indexer.example');
+      expect(gotEasynews, isNotNull);
+    });
+
+    testWidgets('saglayici easynews degilse Easynews aramaya katilmaz', (
+      tester,
+    ) async {
+      EasynewsConfigDto? gotEasynews;
+      await tester.pumpWithL10n(
+        SearchScreen(
+          store: _completeStore,
+          providerStore: _completeProviderStore,
+          searchFn: ({
+            indexer,
+            easynews,
+            required query,
+            required limit,
+            required offset,
+          }) async {
+            gotEasynews = easynews;
+            return _fakeEasynewsSearch(
+              indexer: indexer,
+              easynews: easynews,
+              query: query,
+              limit: limit,
+              offset: offset,
+            );
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _enterQueryAndSearch(tester, 'film');
+
+      expect(gotEasynews, isNull);
+    });
+
+    testWidgets('indexer yoksa Easynews tek basina arama yapar', (tester) async {
+      IndexerConfigDto? gotIndexer;
+      await tester.pumpWithL10n(
+        SearchScreen(
+          store: _FakeIndexerStore(const IndexerSettings()),
+          providerStore: _easynewsProviderStore,
+          searchFn: ({
+            indexer,
+            easynews,
+            required query,
+            required limit,
+            required offset,
+          }) async {
+            gotIndexer = indexer;
+            return _fakeEasynewsSearch(
+              indexer: indexer,
+              easynews: easynews,
+              query: query,
+              limit: limit,
+              offset: offset,
+            );
+          },
+          easynewsDownloadFn: (config, nzbUrl, suggestedName) async =>
+              '/tmp/easynews.nzb',
+          onDownloaded: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Yonlendirme gorunumu yok: Easynews kaynak olarak yeterli.
+      expect(find.text('Ayarlara git'), findsNothing);
+
+      await _enterQueryAndSearch(tester, 'film');
+
+      expect(gotIndexer, isNull);
+      expect(find.text('Film.2024.1080p.WEB-DL-GRP'), findsOneWidget);
+      // Kaynak cipi görünür.
+      expect(find.text('Easynews'), findsOneWidget);
+    });
+
+    testWidgets('Easynews sonucu Easynews indirme yolunu kullanir', (
+      tester,
+    ) async {
+      var indexerDownloads = 0;
+      final easynewsCalls = <List<Object>>[];
+      String? playedPath;
+      await tester.pumpWithL10n(
+        SearchScreen(
+          store: _FakeIndexerStore(const IndexerSettings()),
+          providerStore: _easynewsProviderStore,
+          searchFn: _fakeEasynewsSearch,
+          downloadFn: (config, nzbUrl, suggestedName) async {
+            indexerDownloads++;
+            return '/tmp/indexer.nzb';
+          },
+          easynewsDownloadFn: (config, nzbUrl, suggestedName) async {
+            easynewsCalls.add([nzbUrl, suggestedName]);
+            return '/tmp/easynews.nzb';
+          },
+          onDownloaded: (path) => playedPath = path,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _enterQueryAndSearch(tester, 'film');
+
+      await tester.tap(find.text('Film.2024.1080p.WEB-DL-GRP'));
+      await tester.pumpAndSettle();
+
+      // Indexer indirme yolu hic kullanilmaz; Easynews referansi tasinir.
+      expect(indexerDownloads, 0);
+      expect(easynewsCalls, isNotEmpty);
+      expect(easynewsCalls.first.first, startsWith('easynews:h1|'));
+      expect(playedPath, '/tmp/easynews.nzb');
     });
   });
 }

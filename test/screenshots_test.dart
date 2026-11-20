@@ -206,6 +206,7 @@ List<SearchItemDto> _fakeResults() => [
   SearchItemDto(
     title: 'Fight.Club.1999.UHD.BluRay.2160p.DDP.5.1.DV.HDR10.x265-hallowed',
     nzbUrl: 'https://indexer.example/getnzb/1',
+    source: 'indexer',
     sizeBytes: BigInt.from(19463027098),
     publishedEpochSecs:
         DateTime.now().subtract(const Duration(days: 412)).millisecondsSinceEpoch ~/
@@ -219,6 +220,7 @@ List<SearchItemDto> _fakeResults() => [
     title:
         'Coming.to.America.1988.2160p.UHD.BluRay.Remux.HDR.DV.HEVC.DTS-HD.MA.5.1-PmP',
     nzbUrl: 'https://indexer.example/getnzb/2',
+    source: 'indexer',
     sizeBytes: BigInt.from(52613349376),
     publishedEpochSecs:
         DateTime.now().subtract(const Duration(days: 87)).millisecondsSinceEpoch ~/
@@ -230,6 +232,7 @@ List<SearchItemDto> _fakeResults() => [
   SearchItemDto(
     title: 'Fight.Club.1999.1080p.BluRay.x264.DTS-ESiR',
     nzbUrl: 'https://indexer.example/getnzb/3',
+    source: 'indexer',
     sizeBytes: BigInt.from(10737418240),
     publishedEpochSecs:
         DateTime.now().subtract(const Duration(days: 640)).millisecondsSinceEpoch ~/
@@ -721,7 +724,7 @@ void main() {
       _screenshotApp(
         SearchScreen(
           store: _FakeIndexerStore(),
-          searchFn: (config, query, limit, offset) async => SearchPageDto(
+          searchFn: ({indexer, easynews, required query, required limit, required offset}) async => SearchPageDto(
             total: BigInt.from(3),
             items: _fakeResults(),
           ),
@@ -834,7 +837,7 @@ void main() {
       _screenshotApp(
         SearchScreen(
           store: _FakeIndexerStore(),
-          searchFn: (config, query, limit, offset) async {
+          searchFn: ({indexer, easynews, required query, required limit, required offset}) async {
             await Future<void>.delayed(const Duration(milliseconds: 350));
             return SearchPageDto(total: BigInt.from(3), items: _fakeResults());
           },

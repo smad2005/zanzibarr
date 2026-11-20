@@ -151,6 +151,9 @@ pub struct SearchItem {
     pub episode: Option<u32>,
     /// Başlıktan çözümlenen release bilgisi.
     pub release: ReleaseInfo,
+    /// Sonucun geldiği arama kaynağı ("indexer" / "easynews"); çapraz
+    /// kaynak tekilleştirmede tutulan kopyanın kökeni budur.
+    pub source: String,
 }
 
 pub struct SearchPage {
@@ -293,6 +296,7 @@ pub fn parse_search_response(xml: &str) -> Result<SearchPage, NewznabError> {
                                     season: item.season.or(release.season),
                                     episode: item.episode.or(release.episode),
                                     release,
+                                    source: "indexer".to_string(),
                                 });
                             }
                         }
@@ -1231,6 +1235,7 @@ mod tests {
             season: None,
             episode: None,
             release: ReleaseInfo::parse(title),
+            source: "indexer".to_string(),
         }
     }
 
@@ -1247,6 +1252,26 @@ mod tests {
         assert_eq!(kept.len(), 3);
         assert_eq!(kept[0].size_bytes, Some(1000));
         assert_eq!(kept[1].size_bytes, Some(2000));
+    }
+
+    /// Çapraz kaynak: aynı release hem indexer'da hem Easynews'te varsa
+    /// önce gelen (indexer) tutulur ve `source` etiketi korunur.
+    #[test]
+    fn tekillestirme_kaynaklar_arasi() {
+        let mut from_indexer = item("Movie.2024.2160p.WEB-DL-GRP", Some(1000));
+        from_indexer.source = "indexer".to_string();
+        from_indexer.nzb_url = "https://idx.example/get/1".to_string();
+        let mut from_easynews = item("Movie.2024.2160p.WEB-DL-GRP", Some(1005));
+        from_easynews.source = "easynews".to_string();
+        from_easynews.nzb_url = "easynews:abc|Movie.mkv|sig".to_string();
+        let mut easynews_only = item("Show.S01E01.1080p-GRP", Some(700));
+        easynews_only.source = "easynews".to_string();
+
+        let kept = dedup_items(vec![from_indexer, from_easynews, easynews_only]);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].source, "indexer");
+        assert_eq!(kept[0].nzb_url, "https://idx.example/get/1");
+        assert_eq!(kept[1].source, "easynews");
     }
 
     // -- Tarih ------------------------------------------------------------------

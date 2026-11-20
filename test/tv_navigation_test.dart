@@ -8,6 +8,8 @@ import 'package:zanzibarr/search/search_screen.dart';
 import 'package:zanzibarr/settings/indexer_settings.dart';
 import 'package:zanzibarr/settings/provider_settings.dart';
 import 'package:zanzibarr/settings/settings_screen.dart';
+import 'package:zanzibarr/src/rust/api/easynews.dart'
+    show EasynewsConfigDto;
 import 'package:zanzibarr/src/rust/api/search.dart';
 import 'package:zanzibarr/update/update_service.dart';
 
@@ -303,17 +305,19 @@ void main() {
   });
 
   group('Arama ekranı D-pad gezintisi', () {
-    Future<SearchPageDto> fakeSearch(
-      IndexerConfigDto config,
-      String query,
-      int limit,
-      int offset,
-    ) async => SearchPageDto(
+    Future<SearchPageDto> fakeSearch({
+      IndexerConfigDto? indexer,
+      EasynewsConfigDto? easynews,
+      required String query,
+      required int limit,
+      required int offset,
+    }) async => SearchPageDto(
       total: BigInt.from(1),
       items: [
         SearchItemDto(
           title: 'Bir.Film.2024.2160p.WEB-DL.DV.HEVC-GRP',
           nzbUrl: 'https://indexer.example/getnzb/1',
+          source: 'indexer',
           sizeBytes: BigInt.from(1000000),
           badges: const ['2160p'],
           mediaKind: 'movie',
