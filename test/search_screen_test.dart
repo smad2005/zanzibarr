@@ -20,6 +20,20 @@ class _FakeIndexerStore extends IndexerSettingsStore {
 
   final IndexerSettings settings;
 
+  /// Ekran çoklu indexer API'siyle (loadProfiles) çalışır; sahte depo tek
+  /// profili 'default' kimliğiyle sunar. Eksik ayar hiç profil vermez.
+  @override
+  Future<List<IndexerProfile>> loadProfiles() async {
+    if (!settings.isComplete) return const [];
+    return [
+      IndexerProfile(
+        id: 'default',
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+      ),
+    ];
+  }
+
   @override
   Future<IndexerSettings> load() async => settings;
 }
@@ -50,6 +64,7 @@ final _completeProviderStore = _FakeProviderStore(
 SearchItemDto _movieItem() => SearchItemDto(
   title: 'Bir.Film.2024.2160p.WEB-DL.DV.HEVC-GRP',
   source: 'indexer',
+  sourceId: 'default',
   nzbUrl: 'https://indexer.example/getnzb/1',
   sizeBytes: BigInt.from(6979321856), // 6,5 GB
   publishedEpochSecs:
@@ -63,6 +78,7 @@ SearchItemDto _movieItem() => SearchItemDto(
 SearchItemDto _tvItem() => SearchItemDto(
   title: 'Bir.Dizi.S01E02.1080p.WEB-GRP',
   source: 'indexer',
+  sourceId: 'default',
   nzbUrl: 'https://indexer.example/getnzb/2',
   sizeBytes: BigInt.from(734003200), // 700 MB
   badges: const ['1080p'],
@@ -73,7 +89,7 @@ SearchItemDto _tvItem() => SearchItemDto(
 
 /// Sabit iki sonuç döndüren sahte arama.
 Future<SearchPageDto> _fakeSearch({
-  IndexerConfigDto? indexer,
+  List<IndexerConfigDto>? indexers,
   EasynewsConfigDto? easynews,
   required String query,
   required int limit,
@@ -98,10 +114,11 @@ SearchItemDto _easynewsItem() => SearchItemDto(
   badges: const ['1080p'],
   mediaKind: 'movie',
   source: 'easynews',
+  sourceId: '',
 );
 
 Future<SearchPageDto> _fakeEasynewsSearch({
-  IndexerConfigDto? indexer,
+  List<IndexerConfigDto>? indexers,
   EasynewsConfigDto? easynews,
   required String query,
   required int limit,
@@ -241,7 +258,7 @@ void main() {
     await tester.pumpWithL10n(
       SearchScreen(
         store: _completeStore,
-        searchFn: ({indexer, easynews, required query, required limit, required offset}) async =>
+        searchFn: ({indexers, easynews, required query, required limit, required offset}) async =>
             throw Exception('Indexer yanıt vermiyor'),
       ),
     );
@@ -256,7 +273,7 @@ void main() {
     await tester.pumpWithL10n(
       SearchScreen(
         store: _completeStore,
-        searchFn: ({indexer, easynews, required query, required limit, required offset}) async =>
+        searchFn: ({indexers, easynews, required query, required limit, required offset}) async =>
             SearchPageDto(total: BigInt.zero, items: const []),
       ),
     );
@@ -538,23 +555,23 @@ void main() {
     testWidgets('saglayici Easynews ise web arama yapilandirmasi turetilir', (
       tester,
     ) async {
-      IndexerConfigDto? gotIndexer;
+      List<IndexerConfigDto>? gotIndexers;
       EasynewsConfigDto? gotEasynews;
       await tester.pumpWithL10n(
         SearchScreen(
           store: _completeStore,
           providerStore: _easynewsProviderStore,
           searchFn: ({
-            indexer,
+            indexers,
             easynews,
             required query,
             required limit,
             required offset,
           }) async {
-            gotIndexer = indexer;
+            gotIndexers = indexers;
             gotEasynews = easynews;
             return _fakeSearch(
-              indexer: indexer,
+              indexers: indexers,
               easynews: easynews,
               query: query,
               limit: limit,
@@ -570,7 +587,7 @@ void main() {
       await _enterQueryAndSearch(tester, 'film');
 
       // Indexer VE Easynews ayni aramaya tasinir.
-      expect(gotIndexer?.baseUrl, 'https://indexer.example');
+      expect(gotIndexers?.single.baseUrl, 'https://indexer.example');
       expect(gotEasynews, isNotNull);
     });
 
@@ -583,7 +600,7 @@ void main() {
           store: _completeStore,
           providerStore: _completeProviderStore,
           searchFn: ({
-            indexer,
+            indexers,
             easynews,
             required query,
             required limit,
@@ -591,7 +608,7 @@ void main() {
           }) async {
             gotEasynews = easynews;
             return _fakeEasynewsSearch(
-              indexer: indexer,
+              indexers: indexers,
               easynews: easynews,
               query: query,
               limit: limit,
@@ -607,21 +624,21 @@ void main() {
     });
 
     testWidgets('indexer yoksa Easynews tek basina arama yapar', (tester) async {
-      IndexerConfigDto? gotIndexer;
+      List<IndexerConfigDto>? gotIndexers;
       await tester.pumpWithL10n(
         SearchScreen(
           store: _FakeIndexerStore(const IndexerSettings()),
           providerStore: _easynewsProviderStore,
           searchFn: ({
-            indexer,
+            indexers,
             easynews,
             required query,
             required limit,
             required offset,
           }) async {
-            gotIndexer = indexer;
+            gotIndexers = indexers;
             return _fakeEasynewsSearch(
-              indexer: indexer,
+              indexers: indexers,
               easynews: easynews,
               query: query,
               limit: limit,
@@ -640,7 +657,7 @@ void main() {
 
       await _enterQueryAndSearch(tester, 'film');
 
-      expect(gotIndexer, isNull);
+      expect(gotIndexers, isNull);
       expect(find.text('Film.2024.1080p.WEB-DL-GRP'), findsOneWidget);
       // Kaynak cipi görünür.
       expect(find.text('Easynews'), findsOneWidget);
@@ -694,7 +711,7 @@ void main() {
         SearchScreen(
           store: _completeStore,
           searchFn: ({
-            indexer,
+            indexers,
             easynews,
             required query,
             required limit,
@@ -702,7 +719,7 @@ void main() {
           }) async {
             searchedQuery = query;
             return _fakeSearch(
-              indexer: indexer,
+              indexers: indexers,
               easynews: easynews,
               query: query,
               limit: limit,

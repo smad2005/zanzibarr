@@ -69,6 +69,29 @@ class _SettingsScreenState extends State<SettingsScreen>
   final _indexerUrlController = TextEditingController();
   final _indexerApiKeyController = TextEditingController();
 
+  // Çoklu NNTP hesabı (profil): ayarlar ekranı hesap listesini yönetir,
+  // kaydedilen hesap akışta kullanılan aktif hesap olur.
+  static const _newAccountSentinel = '__yeni__';
+
+  /// Kayıtlı NNTP hesapları; liste boşsa eski tek-hesap anahtarlarından
+  /// otomatik göçle doldurulur.
+  List<ProviderProfile> _providerProfiles = const [];
+
+  /// Şu anda düzenlenmekte olan hesap; null = "yeni hesap" kipi.
+  String? _editingProviderId;
+  final _providerLabelController = TextEditingController();
+
+  // Çoklu indexer (profil): arama açık hesapların tamamını sorgular.
+  /// Kayıtlı indexer hesapları.
+  List<IndexerProfile> _indexerProfiles = const [];
+
+  /// Şu anda düzenlenmekte olan indexer; null = "yeni indexer" kipi.
+  String? _editingIndexerId;
+  final _indexerLabelController = TextEditingController();
+
+  /// Düzenlenen indexer aramalara katılıyor mu.
+  bool _indexerJoinSearches = true;
+
   // OpenSubtitles bölümü de kendi Form'unu taşır (API anahtarı + hesap).
   final _osFormKey = GlobalKey<FormState>();
   final _osUrlController = TextEditingController();
@@ -99,6 +122,14 @@ class _SettingsScreenState extends State<SettingsScreen>
   late final _indexerUrlFocusNode = dpadTraversalFocusNode(
     _indexerUrlController,
   );
+  late final _providerLabelFocusNode = dpadTraversalFocusNode(
+    _providerLabelController,
+  );
+  late final _indexerLabelFocusNode = dpadTraversalFocusNode(
+    _indexerLabelController,
+  );
+  final _providerDeleteFocusNode = FocusNode();
+  final _indexerDeleteFocusNode = FocusNode();
   late final FocusNode _indexerApiKeyFocusNode = dpadTraversalFocusNode(
     _indexerApiKeyController,
     focusOnRightEdge: () => _indexerApiKeyEyeFocusNode,
@@ -177,14 +208,15 @@ class _SettingsScreenState extends State<SettingsScreen>
       });
     }
     try {
-      final settings = await _store.load();
+      final profiles = await _store.loadProfiles();
+      final active = profiles.isEmpty
+          ? null
+          : await _store.activeProfileOf(profiles);
       if (!mounted) return;
       setState(() {
-        _hostController.text = settings.host;
-        _portController.text = settings.port.toString();
-        _usernameController.text = settings.username;
-        _passwordController.text = settings.password;
-        _maxConnectionsController.text = settings.maxConnections.toString();
+        _providerProfiles = profiles;
+        _editingProviderId = active?.id;
+        _fillProviderForm(active);
         _loading = false;
       });
     } catch (error) {
@@ -196,17 +228,241 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
+  /// Seçili hesabın alanlarını forma doldurur; null gelenektir yeni hesap
+  /// kipidir (boş alanlar).
+  void _fillProviderForm(ProviderProfile? profile) {
+    _providerLabelController.text = profile?.label ?? '';
+    _hostController.text = profile?.host ?? '';
+    _portController.text = (profile?.port ?? 563).toString();
+    _usernameController.text = profile?.username ?? '';
+    _passwordController.text = profile?.password ?? '';
+    _maxConnectionsController.text =
+        (profile?.maxConnections ?? 10).toString();
+  }
+
+  /// Hesap seçici değişince düzenlenecek hesap forma yüklenir; "yeni hesap"
+  /// girdisi alanları boşaltır. Kaydet basılmadan depo değişmez.
+  void _onProviderAccountChanged(String? value) {
+    if (value == null) return;
+    if (value == _newAccountSentinel) {
+      setState(() {
+        _editingProviderId = null;
+        _fillProviderForm(null);
+      });
+      return;
+    }
+    final match = _providerProfiles
+        .where((profile) => profile.id == value)
+        .toList(growable: false);
+    if (match.isEmpty) return;
+    setState(() {
+      _editingProviderId = value;
+      _fillProviderForm(match.first);
+    });
+  }
+
+  /// Depodan profil listesini yeniden çeker ve seçiciyi günceller.
+  Future<void> _refreshProviderProfiles({String? editingId}) async {
+    final profiles = await _store.loadProfiles();
+    if (!mounted) return;
+    setState(() {
+      _providerProfiles = profiles;
+      _editingProviderId = editingId;
+    });
+  }
+
+  Future<void> _deleteProviderAccount() async {
+    final id = _editingProviderId;
+    if (id == null || _saving || _providerProfiles.isEmpty) return;
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.settingsAccountDeleteTitle),
+        content: Text(l10n.settingsAccountDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.settingsAccountDeleteCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.settingsAccountDeleteConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _store.deleteProfile(id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).settingsSaveFailed('$e')),
+        ),
+      );
+      return;
+    }
+    final profiles = await _store.loadProfiles();
+    if (!mounted) return;
+    final active = profiles.isEmpty
+        ? null
+        : await _store.activeProfileOf(profiles);
+    if (!mounted) return;
+    setState(() {
+      _providerProfiles = profiles;
+      _editingProviderId = active?.id;
+      _fillProviderForm(active);
+    });
+  }
+
   /// Indexer okuması NNTP'den bağımsızdır: depo okunamazsa (veya hiç
   /// tamamlanamazsa) NNTP formu kilitlenmesin, indexer alanları boş kalsın.
   Future<void> _loadIndexer() async {
     try {
-      final indexer = await _indexerStore.load();
+      final profiles = await _indexerStore.loadProfiles();
       if (!mounted) return;
+      final editing = profiles.isEmpty
+          ? null
+          : profiles.firstWhere(
+              (profile) => profile.searchable,
+              orElse: () => profiles.first,
+            );
       setState(() {
-        _indexerUrlController.text = indexer.baseUrl;
-        _indexerApiKeyController.text = indexer.apiKey;
+        _indexerProfiles = profiles;
+        _editingIndexerId = editing?.id;
+        _fillIndexerForm(editing);
       });
     } catch (_) {}
+  }
+
+  /// Seçili indexer'ın alanlarını forma doldurur; null yeni-indexer kipidir.
+  void _fillIndexerForm(IndexerProfile? profile) {
+    _indexerLabelController.text = profile?.label ?? '';
+    _indexerUrlController.text = profile?.baseUrl ?? '';
+    _indexerApiKeyController.text = profile?.apiKey ?? '';
+    _indexerJoinSearches = profile?.enabled ?? true;
+  }
+
+  void _onIndexerAccountChanged(String? value) {
+    if (value == null) return;
+    if (value == _newAccountSentinel) {
+      setState(() {
+        _editingIndexerId = null;
+        _fillIndexerForm(null);
+      });
+      return;
+    }
+    final match = _indexerProfiles
+        .where((profile) => profile.id == value)
+        .toList(growable: false);
+    if (match.isEmpty) return;
+    setState(() {
+      _editingIndexerId = value;
+      _fillIndexerForm(match.first);
+    });
+  }
+
+  Future<void> _deleteIndexerAccount() async {
+    final id = _editingIndexerId;
+    if (id == null || _indexerProfiles.isEmpty) return;
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.settingsAccountDeleteTitle),
+        content: Text(l10n.settingsAccountDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.settingsAccountDeleteCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.settingsAccountDeleteConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _indexerStore.deleteProfile(id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).settingsSaveFailed('$e')),
+        ),
+      );
+      return;
+    }
+    final profiles = await _indexerStore.loadProfiles();
+    if (!mounted) return;
+    setState(() {
+      _indexerProfiles = profiles;
+      _editingIndexerId = profiles.isEmpty
+          ? null
+          : (profiles.firstWhere(
+              (profile) => profile.searchable,
+              orElse: () => profiles.first,
+            )).id;
+      _fillIndexerForm(
+        profiles.isEmpty
+            ? null
+            : profiles.firstWhere(
+                (profile) => profile.id == _editingIndexerId,
+                orElse: () => profiles.first,
+              ),
+      );
+    });
+  }
+
+  Future<void> _saveIndexer() async {
+    if (_savingIndexer) return;
+    if (!_indexerFormKey.currentState!.validate()) return;
+    setState(() {
+      _savingIndexer = true;
+      _obscureApiKey = true;
+    });
+    var saved = false;
+    // Yeni-indexer kipinde kayıt yeni kimlikle oluşturulur.
+    final id = _editingIndexerId ?? IndexerProfile.newId();
+    try {
+      await _indexerStore.saveProfile(
+        IndexerProfile(
+          id: id,
+          label: _indexerLabelController.text.trim(),
+          baseUrl: _indexerUrlController.text.trim(),
+          apiKey: _indexerApiKeyController.text.trim(),
+          enabled: _indexerJoinSearches,
+        ),
+      );
+      saved = true;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).settingsSaveFailed('$e')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingIndexer = false);
+    }
+    if (!mounted || !saved) return;
+    try {
+      final profiles = await _indexerStore.loadProfiles();
+      if (mounted) {
+        setState(() {
+          _indexerProfiles = profiles;
+          _editingIndexerId = id;
+        });
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context).settingsSaved)),
+    );
   }
 
   Future<void> _save() async {
@@ -217,9 +473,14 @@ class _SettingsScreenState extends State<SettingsScreen>
       _obscurePassword = true;
     });
     var saved = false;
+    // Yeni hesap kipinde (seçici "yeni" girdisinde) kayıt yeni kimlikle
+    // oluşturulur; kaydet aynı zamanda bu hesabı aktif yapar.
+    final id = _editingProviderId ?? ProviderProfile.newId();
     try {
-      await _store.save(
-        ProviderSettings(
+      await _store.saveProfile(
+        ProviderProfile(
+          id: id,
+          label: _providerLabelController.text.trim(),
           host: _hostController.text.trim(),
           port: int.parse(_portController.text.trim()),
           username: _usernameController.text.trim(),
@@ -241,38 +502,12 @@ class _SettingsScreenState extends State<SettingsScreen>
       if (mounted) setState(() => _saving = false);
     }
     if (!mounted || !saved) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).settingsSaved)),
-    );
-  }
-
-  Future<void> _saveIndexer() async {
-    if (_savingIndexer) return;
-    if (!_indexerFormKey.currentState!.validate()) return;
-    setState(() {
-      _savingIndexer = true;
-      _obscureApiKey = true;
-    });
-    var saved = false;
     try {
-      await _indexerStore.save(
-        IndexerSettings(
-          baseUrl: _indexerUrlController.text.trim(),
-          apiKey: _indexerApiKeyController.text.trim(),
-        ),
-      );
-      saved = true;
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).settingsSaveFailed('$e')),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _savingIndexer = false);
+      await _refreshProviderProfiles(editingId: id);
+    } catch (_) {
+      // Liste yenilenemezse kayıt yine geçerlidir; seçici eski kalır.
     }
-    if (!mounted || !saved) return;
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context).settingsSaved)),
     );
@@ -540,7 +775,12 @@ class _SettingsScreenState extends State<SettingsScreen>
     setState(() => _testingIndexer = true);
     try {
       final caps = await _capsFn(
-        IndexerConfigDto(baseUrl: baseUrl, apiKey: apiKey),
+        IndexerConfigDto(
+          // Caps sınaması formdaki (düzenlenen) hesapla yapılır.
+          id: _editingIndexerId ?? '',
+          baseUrl: baseUrl,
+          apiKey: apiKey,
+        ),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -668,6 +908,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     _indexerApiKeyController
       ..clear()
       ..dispose();
+    _providerLabelController.dispose();
+    _indexerLabelController.dispose();
     _hostFocusNode.dispose();
     _portFocusNode.dispose();
     _maxConnectionsFocusNode.dispose();
@@ -677,6 +919,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     _indexerUrlFocusNode.dispose();
     _indexerApiKeyFocusNode.dispose();
     _indexerApiKeyEyeFocusNode.dispose();
+    _providerLabelFocusNode.dispose();
+    _indexerLabelFocusNode.dispose();
+    _providerDeleteFocusNode.dispose();
+    _indexerDeleteFocusNode.dispose();
     super.dispose();
   }
 
@@ -827,15 +1073,95 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ),
                       ),
                       const SizedBox(height: 24),
+                      // Hesap seçici: çoklu NNTP hesabı arasında gezinme,
+                      // ekleme ve silme. Kaydedilen hesap akışta kullanılır.
+                      _SettingsCard(
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  // Uygulama bölümü yoksa D-pad gezintisi bu
+                                  // ilk kontrolden başlar.
+                                  autofocus: widget.uiPreferences == null,
+                                  initialValue:
+                                      _editingProviderId ??
+                                      _newAccountSentinel,
+                                  decoration: InputDecoration(
+                                    labelText: l10n.settingsAccountLabel,
+                                    prefixIcon: const Icon(
+                                      Icons.account_circle_outlined,
+                                      size: 19,
+                                    ),
+                                  ),
+                                  items: [
+                                    for (final profile
+                                        in _providerProfiles)
+                                      DropdownMenuItem(
+                                        value: profile.id,
+                                        child: Text(profile.displayName),
+                                      ),
+                                    DropdownMenuItem(
+                                      value: _newAccountSentinel,
+                                      child: Text(l10n.settingsAccountNew),
+                                    ),
+                                  ],
+                                  onChanged: _onProviderAccountChanged,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                focusNode: _providerDeleteFocusNode,
+                                tooltip: l10n.settingsAccountDeleteTooltip,
+                                icon: const Icon(
+                                  Icons.person_remove_outlined,
+                                  size: 18,
+                                ),
+                                // Yeni-hesap kipinde silinecek kayıt yok.
+                                onPressed:
+                                    _editingProviderId == null ||
+                                        _providerProfiles.isEmpty
+                                    ? null
+                                    : _deleteProviderAccount,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.settingsAccountSaveHint,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                  height: 1.4,
+                                ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _providerLabelController,
+                            focusNode: _providerLabelFocusNode,
+                            decoration: InputDecoration(
+                              labelText: l10n.settingsAccountNameLabel,
+                              prefixIcon: const Icon(
+                                Icons.label_outline_rounded,
+                                size: 19,
+                              ),
+                            ),
+                            textInputAction: TextInputAction.next,
+                            autocorrect: false,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
                       _SettingsCard(
                         children: [
                           TextFormField(
                             controller: _hostController,
                             focusNode: _hostFocusNode,
-                            // Uygulama bölümü yoksa (arama ekranından eski
-                            // yol) ilk kontrol bu alan; TV'de D-pad gezintisi
-                            // buradan başlar.
-                            autofocus: widget.uiPreferences == null,
                             decoration: InputDecoration(
                               labelText: l10n.serverAddressLabel,
                               hintText: 'news.example.com',
@@ -985,6 +1311,96 @@ class _SettingsScreenState extends State<SettingsScreen>
                           children: [
                             _SettingsCard(
                               children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        initialValue:
+                                            _editingIndexerId ??
+                                            _newAccountSentinel,
+                                        decoration: InputDecoration(
+                                          labelText:
+                                              l10n.settingsIndexerAccountLabel,
+                                          prefixIcon: const Icon(
+                                            Icons.travel_explore_rounded,
+                                            size: 19,
+                                          ),
+                                        ),
+                                        items: [
+                                          for (final profile
+                                              in _indexerProfiles)
+                                            DropdownMenuItem(
+                                              value: profile.id,
+                                              child: Text(
+                                                profile.displayName,
+                                              ),
+                                            ),
+                                          DropdownMenuItem(
+                                            value: _newAccountSentinel,
+                                            child: Text(
+                                              l10n.settingsIndexerNew,
+                                            ),
+                                          ),
+                                        ],
+                                        onChanged: _onIndexerAccountChanged,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      focusNode: _indexerDeleteFocusNode,
+                                      tooltip:
+                                          l10n.settingsAccountDeleteTooltip,
+                                      icon: const Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 18,
+                                      ),
+                                      // Yeni-indexer kipinde silinecek kayıt yok.
+                                      onPressed:
+                                          _editingIndexerId == null ||
+                                              _indexerProfiles.isEmpty
+                                          ? null
+                                          : _deleteIndexerAccount,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _indexerLabelController,
+                                  focusNode: _indexerLabelFocusNode,
+                                  decoration: InputDecoration(
+                                    labelText: l10n.settingsIndexerNameLabel,
+                                    prefixIcon: const Icon(
+                                      Icons.label_outline_rounded,
+                                      size: 19,
+                                    ),
+                                  ),
+                                  textInputAction: TextInputAction.next,
+                                  autocorrect: false,
+                                ),
+                                const SizedBox(height: 12),
+                                // Çoklu indexer: kapalı hesap listede durur
+                                // ama aramalara katılmaz.
+                                SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(l10n.settingsIndexerJoinLabel),
+                                  subtitle: Text(
+                                    l10n.settingsIndexerJoinHint,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(height: 1.3),
+                                  ),
+                                  value: _indexerJoinSearches,
+                                  onChanged: (value) => setState(
+                                    () => _indexerJoinSearches = value,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            _SettingsCard(
+                              children: [
                                 TextFormField(
                                   controller: _indexerUrlController,
                                   focusNode: _indexerUrlFocusNode,
@@ -1045,6 +1461,40 @@ class _SettingsScreenState extends State<SettingsScreen>
                                       ),
                                     ),
                                   ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // Prowlarr / NZBHydra2 kullanıcıları için adres
+                            // biçimi ipucu: ikisi de newznab-uyumlu uç verir.
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 1),
+                                  child: Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 16,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    l10n.settingsIndexerProxyHint,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                          height: 1.4,
+                                        ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1121,9 +1571,16 @@ class _SettingsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: cardForeground.withValues(alpha: 0.075)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(children: children),
+      // Kartlara açılır menü (DropdownButtonFormField) konduğunda içindeki
+      // ListTile mürekkep efekti için kendi Material'ına ihtiyaç duyar;
+      // şeffaf aralık DecoratedBox'un varsayılan arka planı gizleme
+      // uyarısını da keser (dil seçici uzun süredir aynı durumdaydı).
+      child: Material(
+        type: MaterialType.transparency,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(children: children),
+        ),
       ),
     );
   }

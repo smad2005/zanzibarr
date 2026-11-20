@@ -727,8 +727,8 @@ fn wire__crate__api__search__search_sources_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_indexer =
-                <Option<crate::api::search::IndexerConfigDto>>::sse_decode(&mut deserializer);
+            let api_indexers =
+                <Option<Vec<crate::api::search::IndexerConfigDto>>>::sse_decode(&mut deserializer);
             let api_easynews =
                 <Option<crate::api::easynews::EasynewsConfigDto>>::sse_decode(&mut deserializer);
             let api_query = <String>::sse_decode(&mut deserializer);
@@ -738,7 +738,7 @@ fn wire__crate__api__search__search_sources_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::search::search_sources(
-                        api_indexer,
+                        api_indexers,
                         api_easynews,
                         api_query,
                         api_limit,
@@ -877,9 +877,11 @@ impl SseDecode for crate::api::search::IndexerCapsDto {
 impl SseDecode for crate::api::search::IndexerConfigDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
         let mut var_baseUrl = <String>::sse_decode(deserializer);
         let mut var_apiKey = <String>::sse_decode(deserializer);
         return crate::api::search::IndexerConfigDto {
+            id: var_id,
             base_url: var_baseUrl,
             api_key: var_apiKey,
         };
@@ -893,6 +895,20 @@ impl SseDecode for Vec<String> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::search::IndexerConfigDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::search::IndexerConfigDto>::sse_decode(
+                deserializer,
+            ));
         }
         return ans_;
     }
@@ -1035,19 +1051,6 @@ impl SseDecode for Option<i64> {
     }
 }
 
-impl SseDecode for Option<crate::api::search::IndexerConfigDto> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::api::search::IndexerConfigDto>::sse_decode(
-                deserializer,
-            ));
-        } else {
-            return None;
-        }
-    }
-}
-
 impl SseDecode for Option<crate::api::repair::RepairProgressDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1077,6 +1080,19 @@ impl SseDecode for Option<u64> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<u64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<Vec<crate::api::search::IndexerConfigDto>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<Vec<crate::api::search::IndexerConfigDto>>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -1168,6 +1184,7 @@ impl SseDecode for crate::api::search::SearchItemDto {
         let mut var_year = <Option<u32>>::sse_decode(deserializer);
         let mut var_group = <Option<String>>::sse_decode(deserializer);
         let mut var_source = <String>::sse_decode(deserializer);
+        let mut var_sourceId = <String>::sse_decode(deserializer);
         return crate::api::search::SearchItemDto {
             title: var_title,
             nzb_url: var_nzbUrl,
@@ -1181,6 +1198,7 @@ impl SseDecode for crate::api::search::SearchItemDto {
             year: var_year,
             group: var_group,
             source: var_source,
+            source_id: var_sourceId,
         };
     }
 }
@@ -1405,6 +1423,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::search::IndexerCapsDto>
 impl flutter_rust_bridge::IntoDart for crate::api::search::IndexerConfigDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
+            self.id.into_into_dart().into_dart(),
             self.base_url.into_into_dart().into_dart(),
             self.api_key.into_into_dart().into_dart(),
         ]
@@ -1587,6 +1606,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::search::SearchItemDto {
             self.year.into_into_dart().into_dart(),
             self.group.into_into_dart().into_dart(),
             self.source.into_into_dart().into_dart(),
+            self.source_id.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1719,6 +1739,7 @@ impl SseEncode for crate::api::search::IndexerCapsDto {
 impl SseEncode for crate::api::search::IndexerConfigDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.base_url, serializer);
         <String>::sse_encode(self.api_key, serializer);
     }
@@ -1730,6 +1751,16 @@ impl SseEncode for Vec<String> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::search::IndexerConfigDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::search::IndexerConfigDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -1832,16 +1863,6 @@ impl SseEncode for Option<i64> {
     }
 }
 
-impl SseEncode for Option<crate::api::search::IndexerConfigDto> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::api::search::IndexerConfigDto>::sse_encode(value, serializer);
-        }
-    }
-}
-
 impl SseEncode for Option<crate::api::repair::RepairProgressDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1868,6 +1889,16 @@ impl SseEncode for Option<u64> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <u64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<Vec<crate::api::search::IndexerConfigDto>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <Vec<crate::api::search::IndexerConfigDto>>::sse_encode(value, serializer);
         }
     }
 }
@@ -1930,6 +1961,7 @@ impl SseEncode for crate::api::search::SearchItemDto {
         <Option<u32>>::sse_encode(self.year, serializer);
         <Option<String>>::sse_encode(self.group, serializer);
         <String>::sse_encode(self.source, serializer);
+        <String>::sse_encode(self.source_id, serializer);
     }
 }
 

@@ -39,16 +39,38 @@ void _mockSecureStorage() {
 /// Ayar ekranı testlerinde gerçek secure storage yerine bellek içi sahte depo.
 class _FakeIndexerStore extends IndexerSettingsStore {
   IndexerSettings saved = const IndexerSettings();
+  List<IndexerProfile> profiles = const [];
+
+  @override
+  Future<List<IndexerProfile>> loadProfiles() async => profiles;
+
+  @override
+  Future<void> saveProfile(IndexerProfile profile) async {
+    final index = profiles.indexWhere((p) => p.id == profile.id);
+    final updated = profiles.toList();
+    if (index >= 0) {
+      updated[index] = profile;
+    } else {
+      updated.add(profile);
+    }
+    profiles = updated;
+    saved = profile.settings;
+  }
+
+  @override
+  Future<void> deleteProfile(String id) async {
+    profiles = profiles.where((p) => p.id != id).toList();
+  }
 
   @override
   Future<IndexerSettings> load() async => saved;
-
-  @override
-  Future<void> save(IndexerSettings settings) async => saved = settings;
 }
 
 /// NNTP bölümü de ekran açılışında depo okur; kanala düşmemesi için sahte.
 class _FakeProviderStore extends ProviderSettingsStore {
+  @override
+  Future<List<ProviderProfile>> loadProfiles() async => const [];
+
   @override
   Future<ProviderSettings> load() async => const ProviderSettings();
 }
@@ -136,6 +158,102 @@ void main() {
         const IndexerSettings(baseUrl: 'https://x.example', apiKey: 'k')
             .isComplete,
         isTrue,
+      );
+    });
+  });
+
+  group('IndexerSettingsStore çoklu profil', () {
+    setUp(() {
+      _memoryStorage.clear();
+      _mockSecureStorage();
+    });
+
+    test('Eski tek indexer anahtarları ilk açılışta profile taşınır', () async {
+      _memoryStorage['indexer.baseUrl'] = 'https://indexer.example';
+      _memoryStorage['indexer.apiKey'] = 'gizli-anahtar';
+
+      final store = IndexerSettingsStore();
+      final profiles = await store.loadProfiles();
+      expect(profiles.length, 1);
+      expect(profiles.first.id, 'default');
+      expect(profiles.first.baseUrl, 'https://indexer.example');
+      expect(profiles.first.enabled, isTrue);
+      // Geriye uyumlu load() aynı ayarları döner.
+      expect((await store.load()).baseUrl, 'https://indexer.example');
+    });
+
+    test('saveProfile hesap ekler/günceller; enabled kapatınca aramaya katılmaz',
+        () async {
+      final store = IndexerSettingsStore();
+      final first = IndexerProfile(
+        id: 'a',
+        label: 'Miatrix',
+        baseUrl: 'https://idx1.example',
+        apiKey: 'k1',
+      );
+      await store.saveProfile(first);
+      expect((await store.loadProfiles()).length, 1);
+
+      final second = IndexerProfile(
+        id: 'b',
+        label: 'Prowlarr proxy',
+        baseUrl: 'http://prowlarr:9696/prowlarr/12/api',
+        apiKey: 'k2',
+      );
+      await store.saveProfile(second);
+      final profiles = await store.loadProfiles();
+      expect(profiles.map((p) => p.id), containsAll(['a', 'b']));
+
+      // load() aramaya katılabilen ilk profili döner.
+      expect((await store.load()).baseUrl, 'https://idx1.example');
+
+      // 'a' kapatılınca aramaya yalnız 'b' katılır.
+      await store.saveProfile(
+        IndexerProfile(
+          id: 'a',
+          label: 'Miatrix',
+          baseUrl: 'https://idx1.example',
+          apiKey: 'k1',
+          enabled: false,
+        ),
+      );
+      expect((await store.load()).baseUrl, 'http://prowlarr:9696/prowlarr/12/api');
+      // Kapalı profil listede durur.
+      expect(
+        (await store.loadProfiles()).any((p) => p.id == 'a' && !p.enabled),
+        isTrue,
+      );
+    });
+
+    test('deleteProfile hesabı kaldırır', () async {
+      final store = IndexerSettingsStore();
+      await store.saveProfile(
+        IndexerProfile(id: 'a', baseUrl: 'https://idx.example', apiKey: 'k'),
+      );
+      await store.saveProfile(
+        IndexerProfile(id: 'b', baseUrl: 'https://idx2.example', apiKey: 'k2'),
+      );
+      await store.deleteProfile('a');
+      expect((await store.loadProfiles()).map((p) => p.id), ['b']);
+      await store.deleteProfile('b');
+      expect(await store.loadProfiles(), isEmpty);
+      expect((await store.load()).isComplete, isFalse);
+    });
+
+    test('Görünüm adı: etiket → URL host → ham URL', () {
+      expect(
+        IndexerProfile(id: 'a', label: 'Hydra', baseUrl: 'http://x:5075/api')
+            .displayName,
+        'Hydra',
+      );
+      expect(
+        IndexerProfile(id: 'b', baseUrl: 'https://idx.example/api')
+            .displayName,
+        'idx.example',
+      );
+      expect(
+        IndexerProfile(id: 'c', baseUrl: 'düz-metin').displayName,
+        'düz-metin',
       );
     });
   });

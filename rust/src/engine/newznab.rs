@@ -154,6 +154,10 @@ pub struct SearchItem {
     /// Sonucun geldiği arama kaynağı ("indexer" / "easynews"); çapraz
     /// kaynak tekilleştirmede tutulan kopyanın kökeni budur.
     pub source: String,
+    /// Kaynağun kimliği: indexer öğelerinde sonuç hangi hesaptan
+    /// (`IndexerConfigDto.id`) geldiğini taşır — Dart tarafı NZB indirme ve
+    /// caps sınamasını doğru hesapla yapar. Easynews öğelerinde boştur.
+    pub source_id: String,
 }
 
 pub struct SearchPage {
@@ -297,6 +301,7 @@ pub fn parse_search_response(xml: &str) -> Result<SearchPage, NewznabError> {
                                     episode: item.episode.or(release.episode),
                                     release,
                                     source: "indexer".to_string(),
+                                    source_id: String::new(),
                                 });
                             }
                         }
@@ -1236,6 +1241,7 @@ mod tests {
             episode: None,
             release: ReleaseInfo::parse(title),
             source: "indexer".to_string(),
+            source_id: String::new(),
         }
     }
 

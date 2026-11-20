@@ -990,4 +990,53 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchSavedTitle => 'Saved searches';
+
+  @override
+  String get settingsAccountLabel => 'Account';
+
+  @override
+  String get settingsAccountNameLabel => 'Account name';
+
+  @override
+  String get settingsAccountNew => '＋ New account…';
+
+  @override
+  String get settingsAccountSaveHint =>
+      'The account you save becomes the account used for streaming.';
+
+  @override
+  String get settingsAccountDeleteTooltip => 'Delete account';
+
+  @override
+  String get settingsAccountDeleteTitle => 'Delete account?';
+
+  @override
+  String get settingsAccountDeleteBody =>
+      'This account will be removed from the list. Other accounts are not affected.';
+
+  @override
+  String get settingsAccountDeleteConfirm => 'Delete';
+
+  @override
+  String get settingsAccountDeleteCancel => 'Cancel';
+
+  @override
+  String get settingsIndexerAccountLabel => 'Indexer';
+
+  @override
+  String get settingsIndexerNameLabel => 'Indexer name';
+
+  @override
+  String get settingsIndexerNew => '＋ New indexer…';
+
+  @override
+  String get settingsIndexerJoinLabel => 'Join searches';
+
+  @override
+  String get settingsIndexerJoinHint =>
+      'Searches query every enabled indexer in parallel and merge the results.';
+
+  @override
+  String get settingsIndexerProxyHint =>
+      'Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key.';
 }

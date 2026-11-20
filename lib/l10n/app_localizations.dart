@@ -1861,6 +1861,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved searches'**
   String get searchSavedTitle;
+
+  /// No description provided for @settingsAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get settingsAccountLabel;
+
+  /// No description provided for @settingsAccountNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account name'**
+  String get settingsAccountNameLabel;
+
+  /// No description provided for @settingsAccountNew.
+  ///
+  /// In en, this message translates to:
+  /// **'＋ New account…'**
+  String get settingsAccountNew;
+
+  /// No description provided for @settingsAccountSaveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The account you save becomes the account used for streaming.'**
+  String get settingsAccountSaveHint;
+
+  /// No description provided for @settingsAccountDeleteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get settingsAccountDeleteTooltip;
+
+  /// No description provided for @settingsAccountDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account?'**
+  String get settingsAccountDeleteTitle;
+
+  /// No description provided for @settingsAccountDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This account will be removed from the list. Other accounts are not affected.'**
+  String get settingsAccountDeleteBody;
+
+  /// No description provided for @settingsAccountDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get settingsAccountDeleteConfirm;
+
+  /// No description provided for @settingsAccountDeleteCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get settingsAccountDeleteCancel;
+
+  /// No description provided for @settingsIndexerAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Indexer'**
+  String get settingsIndexerAccountLabel;
+
+  /// No description provided for @settingsIndexerNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Indexer name'**
+  String get settingsIndexerNameLabel;
+
+  /// No description provided for @settingsIndexerNew.
+  ///
+  /// In en, this message translates to:
+  /// **'＋ New indexer…'**
+  String get settingsIndexerNew;
+
+  /// No description provided for @settingsIndexerJoinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Join searches'**
+  String get settingsIndexerJoinLabel;
+
+  /// No description provided for @settingsIndexerJoinHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Searches query every enabled indexer in parallel and merge the results.'**
+  String get settingsIndexerJoinHint;
+
+  /// No description provided for @settingsIndexerProxyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key.'**
+  String get settingsIndexerProxyHint;
 }
 
 class _AppLocalizationsDelegate

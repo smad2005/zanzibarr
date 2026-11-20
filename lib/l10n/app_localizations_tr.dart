@@ -988,4 +988,53 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get searchSavedTitle => 'Kayıtlı aramalar';
+
+  @override
+  String get settingsAccountLabel => 'Hesap';
+
+  @override
+  String get settingsAccountNameLabel => 'Hesap adı';
+
+  @override
+  String get settingsAccountNew => '＋ Yeni hesap…';
+
+  @override
+  String get settingsAccountSaveHint =>
+      'Kaydettiğiniz hesap, akışta kullanılacak hesap olur.';
+
+  @override
+  String get settingsAccountDeleteTooltip => 'Hesabı sil';
+
+  @override
+  String get settingsAccountDeleteTitle => 'Hesap silinsin mi?';
+
+  @override
+  String get settingsAccountDeleteBody =>
+      'Bu hesap listeden kaldırılacak. Diğer hesaplar etkilenmez.';
+
+  @override
+  String get settingsAccountDeleteConfirm => 'Sil';
+
+  @override
+  String get settingsAccountDeleteCancel => 'Vazgeç';
+
+  @override
+  String get settingsIndexerAccountLabel => 'Indexer';
+
+  @override
+  String get settingsIndexerNameLabel => 'Indexer adı';
+
+  @override
+  String get settingsIndexerNew => '＋ Yeni indexer…';
+
+  @override
+  String get settingsIndexerJoinLabel => 'Aramalara katıl';
+
+  @override
+  String get settingsIndexerJoinHint =>
+      'Aramalar açık durumdaki tüm indexer\'ları paralel sorgular ve sonuçları birleştirir.';
+
+  @override
+  String get settingsIndexerProxyHint =>
+      'Prowlarr / NZBHydra2: Newznab-uyumlu API adreslerini ekleyin (ör. http://prowlarr:9696/prowlarr/1/api ya da http://hydra:5075/api) ve uygulama API anahtarını girin.';
 }

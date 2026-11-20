@@ -72,6 +72,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<IndexerConfigDto> dco_decode_list_indexer_config_dto(dynamic raw);
+
+  @protected
   List<PlayableEntryDto> dco_decode_list_playable_entry_dto(dynamic raw);
 
   @protected
@@ -101,9 +104,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
-  IndexerConfigDto? dco_decode_opt_box_autoadd_indexer_config_dto(dynamic raw);
-
-  @protected
   RepairProgressDto? dco_decode_opt_box_autoadd_repair_progress_dto(
     dynamic raw,
   );
@@ -113,6 +113,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  List<IndexerConfigDto>? dco_decode_opt_list_indexer_config_dto(dynamic raw);
 
   @protected
   PlayableEntryDto dco_decode_playable_entry_dto(dynamic raw);
@@ -211,6 +214,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
+  List<IndexerConfigDto> sse_decode_list_indexer_config_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<PlayableEntryDto> sse_decode_list_playable_entry_dto(
     SseDeserializer deserializer,
   );
@@ -246,11 +254,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
-  IndexerConfigDto? sse_decode_opt_box_autoadd_indexer_config_dto(
-    SseDeserializer deserializer,
-  );
-
-  @protected
   RepairProgressDto? sse_decode_opt_box_autoadd_repair_progress_dto(
     SseDeserializer deserializer,
   );
@@ -260,6 +263,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  List<IndexerConfigDto>? sse_decode_opt_list_indexer_config_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PlayableEntryDto sse_decode_playable_entry_dto(SseDeserializer deserializer);
@@ -380,6 +388,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_indexer_config_dto(
+    List<IndexerConfigDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_playable_entry_dto(
     List<PlayableEntryDto> self,
     SseSerializer serializer,
@@ -428,12 +442,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_opt_box_autoadd_indexer_config_dto(
-    IndexerConfigDto? self,
-    SseSerializer serializer,
-  );
-
-  @protected
   void sse_encode_opt_box_autoadd_repair_progress_dto(
     RepairProgressDto? self,
     SseSerializer serializer,
@@ -444,6 +452,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_indexer_config_dto(
+    List<IndexerConfigDto>? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_playable_entry_dto(

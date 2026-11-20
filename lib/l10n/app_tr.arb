@@ -320,5 +320,20 @@
   "removeSavedSearchTooltip": "Kayıtlı aramayı kaldır",
   "searchClearRecentTooltip": "Son aramaları temizle",
   "searchRecentTitle": "Son aramalar",
-  "searchSavedTitle": "Kayıtlı aramalar"
+  "searchSavedTitle": "Kayıtlı aramalar",
+  "settingsAccountLabel": "Hesap",
+  "settingsAccountNameLabel": "Hesap adı",
+  "settingsAccountNew": "＋ Yeni hesap…",
+  "settingsAccountSaveHint": "Kaydettiğiniz hesap, akışta kullanılacak hesap olur.",
+  "settingsAccountDeleteTooltip": "Hesabı sil",
+  "settingsAccountDeleteTitle": "Hesap silinsin mi?",
+  "settingsAccountDeleteBody": "Bu hesap listeden kaldırılacak. Diğer hesaplar etkilenmez.",
+  "settingsAccountDeleteConfirm": "Sil",
+  "settingsAccountDeleteCancel": "Vazgeç",
+  "settingsIndexerAccountLabel": "Indexer",
+  "settingsIndexerNameLabel": "Indexer adı",
+  "settingsIndexerNew": "＋ Yeni indexer…",
+  "settingsIndexerJoinLabel": "Aramalara katıl",
+  "settingsIndexerJoinHint": "Aramalar açık durumdaki tüm indexer'ları paralel sorgular ve sonuçları birleştirir.",
+  "settingsIndexerProxyHint": "Prowlarr / NZBHydra2: Newznab-uyumlu API adreslerini ekleyin (ör. http://prowlarr:9696/prowlarr/1/api ya da http://hydra:5075/api) ve uygulama API anahtarını girin."
 }

@@ -24,6 +24,10 @@ const MAX_NZB_BYTES: usize = 64 * 1024 * 1024;
 /// Dart'tan gelen indexer yapılandırması.
 pub struct IndexerConfigDto {
     /// Ör. `https://miatrix.example` (sonunda `/api` olabilir ya da olmayabilir).
+    /// Profil kimliği (çoklu indexer ayarlarından): arama sonuçları
+    /// `source_id` olarak bunu geri taşır; Dart NZB indirmede ve caps
+    /// sınamasında doğru hesabı bu id'den bulur.
+    pub id: String,
     pub base_url: String,
     pub api_key: String,
 }
@@ -53,6 +57,10 @@ pub struct SearchItemDto {
     pub group: Option<String>,
     /// Sonucun geldiği kaynak: "indexer" (Newznab) | "easynews".
     pub source: String,
+    /// Indexer kaynaklarında sonucun geldiği profil kimliği
+    /// ([`IndexerConfigDto::id`]); Easynews öğelerinde boş dizedir. Dart,
+    /// NZB'yi doğru indexer hesabından indirir.
+    pub source_id: String,
 }
 
 pub struct SearchPageDto {
@@ -110,7 +118,12 @@ pub(crate) async fn run_indexer_search(
         ],
     );
     let body = fetch_checked_async(&url, MAX_SEARCH_BYTES, SEARCH_TIMEOUT).await?;
-    let page = newznab::parse_search_response(&body).map_err(|error| error.to_string())?;
+    let mut page = newznab::parse_search_response(&body).map_err(|error| error.to_string())?;
+    // Sonuçlar bu hesabın (profil) kimliğiyle etiketlenir: çoklu indexer
+    // desteğinde Dart indirme yolunu bu kimlikle seçer.
+    for item in &mut page.items {
+        item.source_id = config.id.clone();
+    }
     Ok(SourceOutcome {
         items: page.items,
         total: page.total,
@@ -142,6 +155,7 @@ fn item_to_dto(item: newznab::SearchItem) -> SearchItemDto {
         year,
         group,
         source: item.source,
+        source_id: item.source_id,
     }
 }
 
@@ -177,106 +191,134 @@ pub fn newznab_search(
     })
 }
 
-/// Cok kaynakli arama (roadmap #4/#5): Newznab indexer VE Easynews web
-/// aramasi ayni sorguyla, paralel sorgulanir; sonuclar tekillestirilip
-/// birlestirilir.
+/// Çok kaynaklı arama (roadmap #4/#5 + çoklu indexer): birden fazla Newznab
+/// hesabı VE Easynews web araması aynı sorguyla, paralel sorgulanır;
+/// sonuçlar tekilleştirilip birleştirilir.
 ///
-/// Kaynak kurallari:
-/// - `indexer` yalniz URL + anahtar doluysa sorgulanir; `easynews` yalniz
-///   kullanici adi + parola doluysa. `None` veya eksik yapilandirma o
-///   kaynagi aramaya katmaz.
-/// - Iki kaynak da devre disiysa hata doner (UI "kaynak yok" gorunumu).
-/// - Kaynaklardan biri hata verirse digerinin sonuclari donebilir (sessiz
-///   kismi basari); hicbiri basarili degilse ilk hata tasinir.
-/// - Ayni release iki kaynakta da varsa `dedup_items` ilk (indexer)
-///   kopyasini tutar; `source` alani tutulan kopyanin kokenini soyler.
-/// - "Toplam" sayisi yalniz tek kaynagin sonuclari anlamlysa doner; karma
-///   listede `None`dir (UI gizler).
+/// Prowlarr (`http://host:9696/prowlarr/{indexerId}/api`) ve NZBHydra2
+/// (`http://host/api`) newznab-uyumlu uç sağladıklarından ayrı bir kod yolu
+/// gerekmez: her biri normal bir "indexer" hesabı olarak eklenir; tekilleştirme
+/// aynı yayının kopyalarını eler.
+///
+/// Kaynak kuralları:
+/// - `indexers` listesindeki tam yapılandırmalı (URL + anahtar dolu) hesaplar
+///   ve kimliği doluysa `easynews` paralel sorgulanır. Hiç kaynak kalmadıysa
+///   hata döner (UI "kaynak yok" görünümü).
+/// - Kaynakların bazıları hata verirse kalanların sonuçları döner (sessiz
+///   kısmi başarı); hiçbiri başarılı değilse ilk hata taşınır.
+/// - Aynı release birden fazla kaynakta varsa `dedup_items` ilk kopyayı tutar:
+///   indexer hesapları çağrıldıkları sıradadır, Easynews en sonda katılır —
+///   listenin başındaki hesap öncelik kabul edilir. Tutulan kopyanın
+///   `source`/`source_id` alanları kökenini söyler.
+/// - "Toplam" sayısı yalnız tek-kaynak sayfa semantiği taşıdığı durumda döner
+///   (tek indexer başarılı + Easynews yok); karmakarışık listelerde gizlenir.
 pub fn search_sources(
-    indexer: Option<IndexerConfigDto>,
+    indexers: Option<Vec<IndexerConfigDto>>,
     easynews: Option<crate::api::easynews::EasynewsConfigDto>,
     query: String,
     limit: u32,
     offset: u32,
 ) -> Result<SearchPageDto, String> {
-    let indexer = indexer.filter(|config| {
+    let mut indexers = indexers.unwrap_or_default();
+    indexers.retain(|config| {
         !config.base_url.trim().is_empty() && !config.api_key.trim().is_empty()
     });
     let easynews = easynews.filter(|config| {
         !config.username.trim().is_empty() && !config.password.is_empty()
     });
-    if indexer.is_none() && easynews.is_none() {
+    if indexers.is_empty() && easynews.is_none() {
         return Err("no search source configured".to_string());
     }
 
     RUNTIME.block_on(async {
-        // Iki kaynak paralel sorgulanir; tek birinin ag gecikmesi tum
-        // aramayi bloklamaz.
-        let (indexer_result, easynews_result) = tokio::join!(
-            async {
-                match indexer.as_ref() {
-                    Some(config) => Some(
-                        run_indexer_search(config, &query, limit, offset).await,
-                    ),
-                    None => None,
-                }
-            },
-            async {
-                match easynews.as_ref() {
-                    Some(config) => Some(
-                        crate::api::easynews::run_search(config, &query, limit, offset).await,
-                    ),
-                    None => None,
-                }
-            }
-        );
+        // Kaynak "yuvaları": indexerlar çağrıldıkları sırada, Easynews en
+        // sonda — bu yuva sırası birleştirmede gözetilir (tekilleştirme
+        // "ilk tutulur" kuralıyla listenin başındaki hesabı tercih eder).
+        let indexer_count = indexers.len();
+        let slot_count = indexer_count + usize::from(easynews.is_some());
+        let mut outcomes: Vec<Option<Result<SourceOutcome, String>>> = (0..slot_count)
+            .map(|_| Option::<Result<SourceOutcome, String>>::None)
+            .collect();
 
-        // Indexer ogeleri once: tekillestirme "ilk tutulur" kuraliyla indexer
-        // kopyasini tercih eder (onn kontrol + NZB akisi zaten indexer uzerinden
-        // kanitlanmistir).
-        let mut items: Vec<newznab::SearchItem> = Vec::new();
-        let mut indexer_total: Option<u64> = None;
-        let mut easynews_total: Option<u64> = None;
-        let mut sources_ok = 0usize;
+        // Eşzamanlı sorgu: her kaynak kendi görevinde koşar; tek birinin ağ
+        // gecikmesi toplamayı bloklamaz. JoinSet tamamlanma sırasını
+        // denetlemeden döndürür — yuva indeksleri sabitlendiğinden anlam
+        // kaybı yok, birleştirme GÖZETİLEN sırayla yapılır.
+        let mut set = tokio::task::JoinSet::new();
+        for (slot, config) in indexers.into_iter().enumerate() {
+            let query = query.clone();
+            set.spawn(async move {
+                (
+                    slot,
+                    run_indexer_search(&config, &query, limit, offset).await,
+                )
+            });
+        }
+        // Spawn edilen görev 'static olmalı: yapılandırma sahiplenilerek
+        // (kopya: üç String) göreve taşınır, dışarıdan ödünç alınmaz.
+        if let Some(config) = easynews.clone() {
+            let query = query.clone();
+            let slot = indexer_count;
+            // JoinSet tek çıktı türü ister: Easynews çıktısı burada genel
+            // kaynak çıktısına (aynı alanlar) çevrilir.
+            set.spawn(async move {
+                let outcome =
+                    crate::api::easynews::run_search(&config, &query, limit, offset).await;
+                (
+                    slot,
+                    outcome.map(|easynews_outcome| SourceOutcome {
+                        items: easynews_outcome.items,
+                        total: easynews_outcome.total,
+                    }),
+                )
+            });
+        }
+
         let mut first_error: Option<String> = None;
-
-        // "Toplam" sayısı tek-kaynak sayfa semantiği taşır: tek indexer
-        // açıkken (easynews başarısız/devre dışı) onun toplamı, tek
-        // easynews kaynaklıyken onun toplamı, karma listede ise gizlenir.
-        // (indexer_result'a değer taşımadan ÖNCE bakılır.)
-        let indexer_attempted = indexer_result.is_some();
-        let easynews_ok = matches!(easynews_result, Some(Ok(_)));
-        match indexer_result {
-            Some(Ok(outcome)) => {
-                sources_ok += 1;
-                indexer_total = outcome.total;
-                items.extend(outcome.items);
+        while let Some(joined) = set.join_next().await {
+            match joined {
+                Ok((slot, result)) => outcomes[slot] = Some(result),
+                Err(error) => {
+                    first_error.get_or_insert(format!("search task failed: {error}"));
+                }
             }
-            Some(Err(error)) => {
-                first_error.get_or_insert(error);
-            }
-            None => {}
-        }
-        match easynews_result {
-            Some(Ok(outcome)) => {
-                sources_ok += 1;
-                easynews_total = outcome.total;
-                items.extend(outcome.items);
-            }
-            Some(Err(error)) => {
-                first_error.get_or_insert(error);
-            }
-            None => {}
         }
 
-        if sources_ok == 0 {
+        let mut items: Vec<newznab::SearchItem> = Vec::new();
+        let mut indexer_ok = 0usize;
+        let mut easynews_ok = false;
+        let mut easynews_total: Option<u64> = None;
+        let mut single_indexer_total: Option<u64> = None;
+        for (slot, outcome) in outcomes.into_iter().enumerate() {
+            match outcome {
+                Some(Ok(outcome)) => {
+                    if slot < indexer_count {
+                        indexer_ok += 1;
+                        single_indexer_total = outcome.total;
+                    } else {
+                        easynews_ok = true;
+                        easynews_total = outcome.total;
+                    }
+                    items.extend(outcome.items);
+                }
+                Some(Err(error)) => {
+                    first_error.get_or_insert(error);
+                }
+                None => {}
+            }
+        }
+
+        if indexer_ok == 0 && !easynews_ok {
             return Err(first_error.unwrap_or_else(|| "search failed".to_string()));
         }
 
-        let total = match (indexer_attempted, easynews_ok) {
-            (true, false) => indexer_total,
-            (true, true) => None,
-            (false, _) => easynews_total,
+        // "Toplam" yalnız tek-kaynak sayfa semantiğinde anlam taşır: tek
+        // indexer (Easynews yok) onun toplamı; yalnız Easynews başarılıysa
+        // onun toplamı; karma veya çoklu indexer listelerinde gizlenir.
+        let total = match (indexer_ok, easynews_ok) {
+            (0, true) => easynews_total,
+            (1, false) => single_indexer_total,
+            _ => None,
         };
         let kept = newznab::dedup_items(items);
         Ok(SearchPageDto {
@@ -407,6 +449,7 @@ mod tests {
 
     fn local_indexer_config(port: u16) -> IndexerConfigDto {
         IndexerConfigDto {
+            id: format!("idx{port}").to_string(),
             base_url: format!("http://127.0.0.1:{port}"),
             api_key: "anahtar".to_string(),
         }
@@ -433,7 +476,27 @@ mod tests {
   </channel>
 </rss>"#;
 
-    const MERGE_JSON: &str = r#"{"results": 2, "data": [
+        /// İkinci indexer yanıtı: aynı release kopyası + benzersiz bir sonuç.
+    /// Çoklu indexer dedup'ı iki durumda birlikte sınar.
+    const MERGE_RSS2: &str = r#"<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Idx2</title>
+    <newznab:response offset="0" total="7" xmlns:newznab="http://x"/>
+    <item>
+      <title>Movie.2024.2160p.WEB-DL.HEVC-GRP</title>
+      <link>http://127.0.0.1/api?t=get&amp;id=dup</link>
+      <newznab:attr name="size" value="16106127360" xmlns:newznab="http://x"/>
+    </item>
+    <item>
+      <title>Dizi.S01E01.1080p.WEB-DL-GRP</title>
+      <link>http://127.0.0.1/api?t=get&amp;id=d2</link>
+      <newznab:attr name="size" value="734003200" xmlns:newznab="http://x"/>
+    </item>
+  </channel>
+</rss>"#;
+
+const MERGE_JSON: &str = r#"{"results": 2, "data": [
         {"hash": "e1", "fn": "Movie.2024.2160p.WEB-DL.HEVC-GRP", "extension": ".mkv",
          "size": 16106127360, "type": "VIDEO", "sig": "sig-bir"},
         {"hash": "e2", "fn": "Dizi.S01E01.1080p.WEB-DL-GRP", "extension": ".mkv",
@@ -446,7 +509,7 @@ mod tests {
         let (easynews_port, _c2) = spawn_responder(http_wrap(MERGE_JSON));
 
         let page = search_sources(
-            Some(local_indexer_config(indexer_port)),
+            Some(vec![local_indexer_config(indexer_port)]),
             Some(local_easynews_config(easynews_port)),
             "movie".to_string(),
             50,
@@ -487,10 +550,11 @@ mod tests {
         let (easynews_port, _c2) = spawn_responder(http_wrap(MERGE_JSON));
         // Bos api anahtari: indexer katilmaz, yalniz easynews sorgulanir.
         let page = search_sources(
-            Some(IndexerConfigDto {
+            Some(vec![IndexerConfigDto {
+                id: "bos".to_string(),
                 base_url: "http://127.0.0.1:1".to_string(),
                 api_key: String::new(),
-            }),
+            }]),
             Some(local_easynews_config(easynews_port)),
             "dizi".to_string(),
             50,
@@ -506,7 +570,7 @@ mod tests {
             spawn_responder("HTTP/1.1 500 Broken\r\nContent-Length: 0\r\n\r\n");
         let (easynews_port, _c2) = spawn_responder(http_wrap(MERGE_JSON));
         let page = search_sources(
-            Some(local_indexer_config(indexer_port)),
+            Some(vec![local_indexer_config(indexer_port)]),
             Some(local_easynews_config(easynews_port)),
             "movie".to_string(),
             50,
@@ -530,7 +594,7 @@ mod tests {
         let (dead_easynews, _c2) =
             spawn_responder("HTTP/1.1 500 Broken\r\nContent-Length: 0\r\n\r\n");
         let result = search_sources(
-            Some(local_indexer_config(dead_indexer)),
+            Some(vec![local_indexer_config(dead_indexer)]),
             Some(local_easynews_config(dead_easynews)),
             "x".to_string(),
             50,
@@ -541,5 +605,58 @@ mod tests {
         };
         assert!(error.contains("500"), "beklenen durum hatasi: {error}");
     }
-}
 
+    #[test]
+    fn search_sources_coklu_indexer_etiketleriyle_birlestirir() {
+        let (first_port, _c1) = spawn_responder(http_wrap(MERGE_RSS));
+        let (second_port, _c2) = spawn_responder(http_wrap(MERGE_RSS2));
+
+        let page = search_sources(
+            Some(vec![
+                local_indexer_config(first_port),
+                local_indexer_config(second_port),
+            ]),
+            None,
+            "movie".to_string(),
+            50,
+            0,
+        )
+        .unwrap();
+
+        // Aynı release iki hesapta da var: listede önce gelen (ilk hesap)
+        // kopyası tutulur; benzersiz sonuç birleşir. Her öğe kendi hesabının
+        // profil kimliğini (`source_id`) taşır.
+        assert_eq!(page.items.len(), 2);
+        assert_eq!(page.items[0].title, "Movie.2024.2160p.WEB-DL.HEVC-GRP");
+        assert_eq!(page.items[0].source_id, format!("idx{first_port}"));
+        assert_eq!(page.items[1].title, "Dizi.S01E01.1080p.WEB-DL-GRP");
+        assert_eq!(page.items[1].source_id, format!("idx{second_port}"));
+        // Çoklu indexerda "toplam" sayfa semantiği taşımaz: gizlenir.
+        assert_eq!(page.total, None);
+    }
+
+    #[test]
+    fn search_sources_indexerlerden_biri_duserse_kalan_doner() {
+        let (dead_port, _c1) =
+            spawn_responder("HTTP/1.1 500 Broken\r\nContent-Length: 0\r\n\r\n");
+        let (alive_port, _c2) = spawn_responder(http_wrap(MERGE_RSS));
+
+        let page = search_sources(
+            Some(vec![
+                local_indexer_config(dead_port),
+                local_indexer_config(alive_port),
+            ]),
+            None,
+            "movie".to_string(),
+            50,
+            0,
+        )
+        .unwrap();
+
+        // Düşen hesap sessizce atlanır; ayakta kalanın sonuçları döner.
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].source_id, format!("idx{alive_port}"));
+        // Tek indexer ayakta kaldı: onun "toplam"ı sayfa semantiği taşır.
+        assert_eq!(page.total, Some(1));
+    }
+}

@@ -250,5 +250,20 @@
   "removeSavedSearchTooltip": "Remove saved search",
   "searchClearRecentTooltip": "Clear recent searches",
   "searchRecentTitle": "Recent searches",
-  "searchSavedTitle": "Saved searches"
+  "searchSavedTitle": "Saved searches",
+  "settingsAccountLabel": "Account",
+  "settingsAccountNameLabel": "Account name",
+  "settingsAccountNew": "＋ New account…",
+  "settingsAccountSaveHint": "The account you save becomes the account used for streaming.",
+  "settingsAccountDeleteTooltip": "Delete account",
+  "settingsAccountDeleteTitle": "Delete account?",
+  "settingsAccountDeleteBody": "This account will be removed from the list. Other accounts are not affected.",
+  "settingsAccountDeleteConfirm": "Delete",
+  "settingsAccountDeleteCancel": "Cancel",
+  "settingsIndexerAccountLabel": "Indexer",
+  "settingsIndexerNameLabel": "Indexer name",
+  "settingsIndexerNew": "＋ New indexer…",
+  "settingsIndexerJoinLabel": "Join searches",
+  "settingsIndexerJoinHint": "Searches query every enabled indexer in parallel and merge the results.",
+  "settingsIndexerProxyHint": "Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key."
 }

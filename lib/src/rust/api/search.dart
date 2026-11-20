@@ -29,29 +29,35 @@ Future<SearchPageDto> newznabSearch({
   offset: offset,
 );
 
-/// Cok kaynakli arama (roadmap #4/#5): Newznab indexer VE Easynews web
-/// aramasi ayni sorguyla, paralel sorgulanir; sonuclar tekillestirilip
-/// birlestirilir.
+/// Çok kaynaklı arama (roadmap #4/#5 + çoklu indexer): birden fazla Newznab
+/// hesabı VE Easynews web araması aynı sorguyla, paralel sorgulanır;
+/// sonuçlar tekilleştirilip birleştirilir.
 ///
-/// Kaynak kurallari:
-/// - `indexer` yalniz URL + anahtar doluysa sorgulanir; `easynews` yalniz
-///   kullanici adi + parola doluysa. `None` veya eksik yapilandirma o
-///   kaynagi aramaya katmaz.
-/// - Iki kaynak da devre disiysa hata doner (UI "kaynak yok" gorunumu).
-/// - Kaynaklardan biri hata verirse digerinin sonuclari donebilir (sessiz
-///   kismi basari); hicbiri basarili degilse ilk hata tasinir.
-/// - Ayni release iki kaynakta da varsa `dedup_items` ilk (indexer)
-///   kopyasini tutar; `source` alani tutulan kopyanin kokenini soyler.
-/// - "Toplam" sayisi yalniz tek kaynagin sonuclari anlamlysa doner; karma
-///   listede `None`dir (UI gizler).
+/// Prowlarr (`http://host:9696/prowlarr/{indexerId}/api`) ve NZBHydra2
+/// (`http://host/api`) newznab-uyumlu uç sağladıklarından ayrı bir kod yolu
+/// gerekmez: her biri normal bir "indexer" hesabı olarak eklenir; tekilleştirme
+/// aynı yayının kopyalarını eler.
+///
+/// Kaynak kuralları:
+/// - `indexers` listesindeki tam yapılandırmalı (URL + anahtar dolu) hesaplar
+///   ve kimliği doluysa `easynews` paralel sorgulanır. Hiç kaynak kalmadıysa
+///   hata döner (UI "kaynak yok" görünümü).
+/// - Kaynakların bazıları hata verirse kalanların sonuçları döner (sessiz
+///   kısmi başarı); hiçbiri başarılı değilse ilk hata taşınır.
+/// - Aynı release birden fazla kaynakta varsa `dedup_items` ilk kopyayı tutar:
+///   indexer hesapları çağrıldıkları sıradadır, Easynews en sonda katılır —
+///   listenin başındaki hesap öncelik kabul edilir. Tutulan kopyanın
+///   `source`/`source_id` alanları kökenini söyler.
+/// - "Toplam" sayısı yalnız tek-kaynak sayfa semantiği taşıdığı durumda döner
+///   (tek indexer başarılı + Easynews yok); karmakarışık listelerde gizlenir.
 Future<SearchPageDto> searchSources({
-  IndexerConfigDto? indexer,
+  List<IndexerConfigDto>? indexers,
   EasynewsConfigDto? easynews,
   required String query,
   required int limit,
   required int offset,
 }) => RustLib.instance.api.crateApiSearchSearchSources(
-  indexer: indexer,
+  indexers: indexers,
   easynews: easynews,
   query: query,
   limit: limit,
@@ -113,19 +119,28 @@ class IndexerCapsDto {
 /// Dart'tan gelen indexer yapılandırması.
 class IndexerConfigDto {
   /// Ör. `https://miatrix.example` (sonunda `/api` olabilir ya da olmayabilir).
+  /// Profil kimliği (çoklu indexer ayarlarından): arama sonuçları
+  /// `source_id` olarak bunu geri taşır; Dart NZB indirmede ve caps
+  /// sınamasında doğru hesabı bu id'den bulur.
+  final String id;
   final String baseUrl;
   final String apiKey;
 
-  const IndexerConfigDto({required this.baseUrl, required this.apiKey});
+  const IndexerConfigDto({
+    required this.id,
+    required this.baseUrl,
+    required this.apiKey,
+  });
 
   @override
-  int get hashCode => baseUrl.hashCode ^ apiKey.hashCode;
+  int get hashCode => id.hashCode ^ baseUrl.hashCode ^ apiKey.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is IndexerConfigDto &&
           runtimeType == other.runtimeType &&
+          id == other.id &&
           baseUrl == other.baseUrl &&
           apiKey == other.apiKey;
 }
@@ -151,6 +166,11 @@ class SearchItemDto {
   /// Sonucun geldiği kaynak: "indexer" (Newznab) | "easynews".
   final String source;
 
+  /// Indexer kaynaklarında sonucun geldiği profil kimliği
+  /// ([`IndexerConfigDto::id`]); Easynews öğelerinde boş dizedir. Dart,
+  /// NZB'yi doğru indexer hesabından indirir.
+  final String sourceId;
+
   const SearchItemDto({
     required this.title,
     required this.nzbUrl,
@@ -164,6 +184,7 @@ class SearchItemDto {
     this.year,
     this.group,
     required this.source,
+    required this.sourceId,
   });
 
   @override
@@ -179,7 +200,8 @@ class SearchItemDto {
       episode.hashCode ^
       year.hashCode ^
       group.hashCode ^
-      source.hashCode;
+      source.hashCode ^
+      sourceId.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -197,7 +219,8 @@ class SearchItemDto {
           episode == other.episode &&
           year == other.year &&
           group == other.group &&
-          source == other.source;
+          source == other.source &&
+          sourceId == other.sourceId;
 }
 
 class SearchPageDto {

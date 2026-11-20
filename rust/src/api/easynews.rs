@@ -22,6 +22,7 @@ use super::streaming::RUNTIME;
 
 /// Dart'ın (sağlayıcı ayarlarından türettiği) Easynews hesap bilgileri.
 /// NNTP girişiyle aynıdır: members.easynews.com da bu kimliğe bakar.
+#[derive(Clone)]
 pub struct EasynewsConfigDto {
     /// Boşsa motor varsayılanı kullanılır (`members.easynews.com`).
     pub base_url: String,
@@ -64,6 +65,7 @@ fn file_to_search_item(file: easynews::EasynewsFile) -> newznab::SearchItem {
         episode: release.episode,
         release,
         source: "easynews".to_string(),
+        source_id: String::new(),
     }
 }
 

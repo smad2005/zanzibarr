@@ -28,24 +28,92 @@ class _FakeProviderStore extends ProviderSettingsStore {
     username: 'kullanici',
     password: 'TESTPASS123',
   );
+  List<ProviderProfile> profiles = const [
+    ProviderProfile(
+      id: 'default',
+      host: 'news.example.com',
+      username: 'kullanici',
+      password: 'TESTPASS123',
+    ),
+  ];
+  String? activeId = 'default';
+
+  // Ayarlar ekranı artık profil API'siyle okur; gezinti testleri dolu
+  // biçim alanlarıyla çalışır (hesaplar gerçek veriyle açılır).
+  @override
+  Future<List<ProviderProfile>> loadProfiles() async => profiles;
+
+  @override
+  Future<String?> activeProfileId() async => activeId;
+
+  @override
+  Future<void> saveProfile(ProviderProfile profile) async {
+    final index = profiles.indexWhere((p) => p.id == profile.id);
+    final updated = profiles.toList();
+    if (index >= 0) {
+      updated[index] = profile;
+    } else {
+      updated.add(profile);
+    }
+    profiles = updated;
+    activeId = profile.id;
+    saved = profile.settings;
+  }
+
+  @override
+  Future<void> deleteProfile(String id) async {
+    profiles = profiles.where((p) => p.id != id).toList();
+    if (activeId == id) {
+      activeId = profiles.isEmpty ? null : profiles.first.id;
+    }
+  }
 
   @override
   Future<ProviderSettings> load() async => saved;
-
-  @override
-  Future<void> save(ProviderSettings settings) async => saved = settings;
 }
 
 class _FakeIndexerStore extends IndexerSettingsStore {
   _FakeIndexerStore(this.settings);
 
   IndexerSettings settings;
+  List<IndexerProfile> profiles = const [];
+
+  /// Ayarlar ekranı ve arama ekranı profil API'siyle okur: tam yapılandırılmış
+  /// ayarlar 'default' kimlikli tek profil olarak sunulur, boş ayarlar hiç
+  /// profil vermez (aramaya katılmaz).
+  @override
+  Future<List<IndexerProfile>> loadProfiles() async {
+    if (profiles.isNotEmpty) return profiles;
+    if (!settings.isComplete) return const [];
+    return [
+      IndexerProfile(
+        id: 'default',
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+      ),
+    ];
+  }
+
+  @override
+  Future<void> saveProfile(IndexerProfile profile) async {
+    final index = profiles.indexWhere((p) => p.id == profile.id);
+    final updated = profiles.toList();
+    if (index >= 0) {
+      updated[index] = profile;
+    } else {
+      updated.add(profile);
+    }
+    profiles = updated;
+    settings = profile.settings;
+  }
+
+  @override
+  Future<void> deleteProfile(String id) async {
+    profiles = profiles.where((p) => p.id != id).toList();
+  }
 
   @override
   Future<IndexerSettings> load() async => settings;
-
-  @override
-  Future<void> save(IndexerSettings value) async => settings = value;
 }
 
 class _NullUpdateService extends UpdateService {
@@ -165,7 +233,8 @@ void main() {
 
       final stops = <String>[_focusLabel(tester)];
       final steps = <String>[stops.first];
-      for (var i = 0; i < 16; i++) {
+      // Hesap seçicileri ve ad alanları eklendi; zincir uzadı.
+      for (var i = 0; i < 26; i++) {
         await _dpadDown(tester);
         final label = _focusLabel(tester);
         steps.add(label);
@@ -200,7 +269,9 @@ void main() {
       // alanları (URL, anahtar, kullanıcı, parola) dolaşılmış olmalı.
       // Ardışık aynı etiketler stops'ta tekilleştiği için ham adımlarda
       // sayılır: zincir "alan: → alan:" diye iniyor.
-      expect(steps.where((step) => step == 'alan:').length, 6);
+      // Boş alan sayısı: hesap adı, indexer adı, indexer URL + anahtarı
+      // ve OpenSubtitles dörtlüsü (8).
+      expect(steps.where((step) => step == 'alan:').length, 8);
     });
 
     testWidgets('yan yana alanlar arasında sol/sağ ok gezer', (tester) async {
@@ -214,7 +285,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Sunucu adresi alanına in (dil → tema → sunucu).
-      for (var i = 0; i < 6 && _focusLabel(tester) != 'alan:news.example.com'; i++) {
+      for (var i = 0; i < 10 && _focusLabel(tester) != 'alan:news.example.com'; i++) {
         await _dpadDown(tester);
       }
       expect(_focusLabel(tester), 'alan:news.example.com');
@@ -257,7 +328,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      for (var i = 0; i < 16 && _focusLabel(tester) != 'alan:TESTPASS123'; i++) {
+      for (var i = 0; i < 26 && _focusLabel(tester) != 'alan:TESTPASS123'; i++) {
         await _dpadDown(tester);
       }
       expect(_focusLabel(tester), 'alan:TESTPASS123');
@@ -291,7 +362,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // "Güvenle kaydet" düğmesine inene kadar aşağı gez.
-      for (var i = 0; i < 16 && _focusLabel(tester) != 'dolgun:Güvenle kaydet'; i++) {
+      for (var i = 0; i < 26 && _focusLabel(tester) != 'dolgun:Güvenle kaydet'; i++) {
         await _dpadDown(tester);
       }
       expect(_focusLabel(tester), 'dolgun:Güvenle kaydet');
@@ -306,7 +377,7 @@ void main() {
 
   group('Arama ekranı D-pad gezintisi', () {
     Future<SearchPageDto> fakeSearch({
-      IndexerConfigDto? indexer,
+      List<IndexerConfigDto>? indexers,
       EasynewsConfigDto? easynews,
       required String query,
       required int limit,
@@ -318,6 +389,7 @@ void main() {
           title: 'Bir.Film.2024.2160p.WEB-DL.DV.HEVC-GRP',
           nzbUrl: 'https://indexer.example/getnzb/1',
           source: 'indexer',
+          sourceId: 'default',
           sizeBytes: BigInt.from(1000000),
           badges: const ['2160p'],
           mediaKind: 'movie',

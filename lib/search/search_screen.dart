@@ -23,7 +23,7 @@ const kSearchSourceEasynews = 'easynews';
 /// FRB `searchSources` imzası; testlerde sahte enjekte edilebilir.
 typedef MultiSourceSearchFn =
     Future<SearchPageDto> Function({
-      IndexerConfigDto? indexer,
+      List<IndexerConfigDto>? indexers,
       EasynewsConfigDto? easynews,
       required String query,
       required int limit,
@@ -127,8 +127,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// D-pad gezintili odak düğümü (issue #4).
   late final _queryFocusNode = dpadTraversalFocusNode(_queryController);
 
-  IndexerSettings _settings = const IndexerSettings();
   ProviderSettings _providerSettings = const ProviderSettings();
+
+  /// Kayıtlı indexer profilleri (çoklu indexer). Arama, tam yapılandırılmış
+  /// ve açık olanların tamamını paralel sorgular.
+  List<IndexerProfile> _indexerProfiles = const [];
   bool _loadingSettings = true;
 
   /// Sağlayıcı Easynews ise web araması için türetilen yapılandırma;
@@ -166,13 +169,13 @@ class _SearchScreenState extends State<SearchScreen> {
   final Map<int, String> _downloadedPaths = {};
 
   static Future<SearchPageDto> _defaultSearch({
-    IndexerConfigDto? indexer,
+    List<IndexerConfigDto>? indexers,
     EasynewsConfigDto? easynews,
     required String query,
     required int limit,
     required int offset,
   }) => searchSources(
-    indexer: indexer,
+    indexers: indexers,
     easynews: easynews,
     query: query,
     limit: limit,
@@ -271,10 +274,12 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _loadSettings() async {
-    IndexerSettings indexer = const IndexerSettings();
+    List<IndexerProfile> profiles = const [];
     ProviderSettings provider = const ProviderSettings();
     try {
-      indexer = await _store.load();
+      // Arama sonuçları geldiği profille etiketlenir (sourceId); indirme
+      // ve ön kontrol o hesapla yapılır.
+      profiles = await _store.loadProfiles();
     } catch (_) {
       // Secure storage okunamazsa indexer yokmuş gibi davran; kullanıcı
       // ayarlardan yeniden girmeyi deneyebilir.
@@ -291,20 +296,28 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _settings = indexer;
+      _indexerProfiles = profiles;
       _providerSettings = provider;
       _easynewsConfig = _deriveEasynewsConfig(provider);
       _loadingSettings = false;
     });
   }
 
-  IndexerConfigDto get _config => IndexerConfigDto(
-    baseUrl: _settings.baseUrl,
-    apiKey: _settings.apiKey,
-  );
+  /// Aramaya katılacak indexer yapılandırmaları: açık ve tam olan profiller,
+  /// kayıt sırasıyla (tekilleştirme baştaki hesabı tercih eder — kullanıcı
+  /// öncelik sırasını ayarlardaki liste sırasıyla belirler).
+  List<IndexerConfigDto> get _searchIndexers => [
+        for (final profile in _indexerProfiles)
+          if (profile.searchable)
+            IndexerConfigDto(
+              id: profile.id,
+              baseUrl: profile.baseUrl,
+              apiKey: profile.apiKey,
+            ),
+      ];
 
-  /// Indexer yapılandırması hazır mı (hazır olmayan kaynak aramaya katılmaz).
-  bool get _indexerReady => _settings.isComplete;
+  /// Indexer kaynakları hazır mı (hazır olmayan kaynak aramaya katılmaz).
+  bool get _indexerReady => _searchIndexers.isNotEmpty;
 
   Future<void> _search() async {
     final query = _queryController.text.trim();
@@ -315,8 +328,9 @@ class _SearchScreenState extends State<SearchScreen> {
       _error = null;
     });
     try {
+      final indexers = _searchIndexers;
       final page = await _searchFn(
-        indexer: _indexerReady ? _config : null,
+        indexers: indexers.isEmpty ? null : indexers,
         easynews: _easynewsConfig,
         query: query,
         limit: _pageSize,
@@ -364,7 +378,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// - Yeni arama/temizleme kuşağı geçersiz kılarsa bekleyen adımlar
   ///   sonuç uygulamaz.
   /// Sonucun NZB'sini indirir: kaynak Easynews'te `dl-nzb` POST'u, indexer'da
-  /// klasik NZB bağlantısı. Sağlık ön kontrolü ve oynatma aynı yolu kullanır.
+  /// klasik NZB bağlantısı. Çoklu indexer'da sonuç hangi profilden geldiyse
+  /// (`sourceId`) o profil indirir. Sağlık ön kontrolü ve oynatma aynı yolu
+  /// kullanır.
   Future<String> _downloadItemNzb(SearchItemDto item) async {
     if (item.source == kSearchSourceEasynews) {
       final easynewsConfig = _easynewsConfig;
@@ -373,7 +389,27 @@ class _SearchScreenState extends State<SearchScreen> {
       }
       return _easynewsDownloadFn(easynewsConfig, item.nzbUrl, item.title);
     }
-    return _downloadFn(_config, item.nzbUrl, item.title);
+    return _downloadFn(_configForItem(item), item.nzbUrl, item.title);
+  }
+
+  /// Sonucun köken profiline ait indexer yapılandırması. Profil bulunamazsa
+  /// (ör. sonuç ayarlardan silinmiş profilden kaldı) aramaya açık ilk
+  /// profil kullanılır; hiçbiri yoksa boş yapılandırma hatayı döndürür.
+  IndexerConfigDto _configForItem(SearchItemDto item) {
+    final profiles = _indexerProfiles;
+    final byId = profiles.where((p) => p.id == item.sourceId).toList();
+    final fallback =
+        profiles.where((p) => p.searchable).toList(growable: false);
+    final profile =
+        byId.isNotEmpty ? byId.first : (fallback.isEmpty ? null : fallback.first);
+    if (profile == null) {
+      return const IndexerConfigDto(id: '', baseUrl: '', apiKey: '');
+    }
+    return IndexerConfigDto(
+      id: profile.id,
+      baseUrl: profile.baseUrl,
+      apiKey: profile.apiKey,
+    );
   }
 
   Future<void> _startHealthSweep(int generation) async {
