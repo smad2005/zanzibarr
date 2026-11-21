@@ -928,6 +928,9 @@ class AppLocalizationsFr extends AppLocalizations {
       'Some archive volumes are missing from the NZB';
 
   @override
+  String get searchHealthCheckTooltip => 'Check NZB health';
+
+  @override
   String get subtitleSearchTooltip => 'Search subtitles online';
 
   @override

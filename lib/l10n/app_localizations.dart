@@ -1730,6 +1730,12 @@ abstract class AppLocalizations {
   /// **'Some archive volumes are missing from the NZB'**
   String get searchHealthMissingVolumes;
 
+  /// No description provided for @searchHealthCheckTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Check NZB health'**
+  String get searchHealthCheckTooltip;
+
   /// No description provided for @subtitleSearchTooltip.
   ///
   /// In en, this message translates to:

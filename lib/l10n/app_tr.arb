@@ -294,6 +294,7 @@
   },
   "searchHealthNoPar2": "Bu yayında PAR2 onarım verisi yok",
   "searchHealthMissingVolumes": "NZB listesinde bazı arşiv ciltleri eksik",
+  "searchHealthCheckTooltip": "NZB sağlığını kontrol et",
   "subtitleSearchTooltip": "Altyazıları çevrimiçi ara",
   "subtitleSearchTitle": "OpenSubtitles",
   "subtitleSearching": "Aranıyor…",

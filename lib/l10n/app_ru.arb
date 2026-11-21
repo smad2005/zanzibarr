@@ -261,6 +261,7 @@
   },
   "searchHealthNoPar2": "No PAR2 repair data in this post",
   "searchHealthMissingVolumes": "Some archive volumes are missing from the NZB",
+  "searchHealthCheckTooltip": "Check NZB health",
   "subtitleSearchTooltip": "Search subtitles online",
   "subtitleSearchTitle": "OpenSubtitles",
   "subtitleSearching": "Searching…",

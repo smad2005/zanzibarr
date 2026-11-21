@@ -340,7 +340,7 @@ class _SearchScreenState extends State<SearchScreen> {
       // Aramayı geçmişe kaydet (aynı sorgu en öne taşınır).
       unawaited(_historyStore.recordSearch(query));
       // Yeni sonuç kümesi: eski ön kontrol durumları ve indirilmiş NZB
-      // yolları geçersiz; tarama yeni kuşakla başlar.
+      // yolları geçersiz; kuşak artırılır (elle denetim yeniden başlar).
       _healthGeneration++;
       _healthStates.clear();
       _downloadedPaths.clear();
@@ -356,7 +356,6 @@ class _SearchScreenState extends State<SearchScreen> {
           if (mounted) _firstResultFocusNode.requestFocus();
         });
       }
-      unawaited(_startHealthSweep(_healthGeneration));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -412,10 +411,14 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Future<void> _startHealthSweep(int generation) async {
+  /// Karttaki kontrol simgesiyle tek bir sonucun NZB sağlığını denetler.
+  /// Otomatik tarama yapılmaz; yalnızca kullanıcı isteğiyle çalışır.
+  Future<void> _checkHealth(int index) async {
     final items = _items;
-    if (items == null || items.isEmpty) return;
-    if (!_providerSettings.isComplete) return;
+    if (items == null || index < 0 || index >= items.length) return;
+    if (!mounted || !_providerSettings.isComplete) return;
+    if (_healthStates[index] is _HealthChecking) return;
+    final generation = _healthGeneration;
     final providerConfig = ProviderConfigDto(
       host: _providerSettings.host,
       port: _providerSettings.port,
@@ -423,34 +426,22 @@ class _SearchScreenState extends State<SearchScreen> {
       password: _providerSettings.password,
       maxConnections: _providerSettings.maxConnections,
     );
-    var consecutiveFailures = 0;
-    for (var index = 0; index < items.length; index++) {
+    setState(() => _healthStates[index] = _HealthChecking());
+    try {
+      // Denetim küçük NZB indirerek yapılır; aynı dosya oynatmada da
+      // kullanılır (yeniden indirme yok).
+      var path = _downloadedPaths[index];
+      if (path == null) {
+        path = await _downloadItemNzb(items[index]);
+        if (!mounted || generation != _healthGeneration) return;
+        _downloadedPaths[index] = path;
+      }
+      final report = await _healthFn(providerConfig, path);
       if (!mounted || generation != _healthGeneration) return;
-      if (_healthStates[index] is _HealthDone ||
-          _healthStates[index] is _HealthFailed) {
-        continue;
-      }
-      final item = items[index];
-      setState(() => _healthStates[index] = _HealthChecking());
-      try {
-        // Denetim küçük NZB indirerek yapılır; aynı dosya oynatmada da
-        // kullanılır (yeniden indirme yok).
-        var path = _downloadedPaths[index];
-        if (path == null) {
-          path = await _downloadItemNzb(item);
-          if (!mounted || generation != _healthGeneration) return;
-          _downloadedPaths[index] = path;
-        }
-        final report = await _healthFn(providerConfig, path);
-        if (!mounted || generation != _healthGeneration) return;
-        setState(() => _healthStates[index] = _HealthDone(report));
-        consecutiveFailures = 0;
-      } catch (_) {
-        if (!mounted || generation != _healthGeneration) return;
-        setState(() => _healthStates[index] = _HealthFailed());
-        consecutiveFailures++;
-        if (consecutiveFailures >= 2) return;
-      }
+      setState(() => _healthStates[index] = _HealthDone(report));
+    } catch (_) {
+      if (!mounted || generation != _healthGeneration) return;
+      setState(() => _healthStates[index] = _HealthFailed());
     }
   }
 
@@ -693,6 +684,7 @@ class _SearchScreenState extends State<SearchScreen> {
         busy: _busyIndex == index,
         enabled: _busyIndex == null,
         health: _healthStates[index],
+        onCheckHealth: () => unawaited(_checkHealth(index)),
         focusNode: index == 0 ? _firstResultFocusNode : null,
         onTap: () => _downloadAndPlay(index),
       ),
@@ -727,6 +719,7 @@ class _SearchResultCard extends StatefulWidget {
     required this.busy,
     required this.enabled,
     required this.onTap,
+    required this.onCheckHealth,
     this.health,
     this.focusNode,
   });
@@ -735,6 +728,9 @@ class _SearchResultCard extends StatefulWidget {
   final bool busy;
   final bool enabled;
   final VoidCallback onTap;
+
+  /// Karttaki kontrol simgesi: elle sağlık denetimi başlatır.
+  final VoidCallback onCheckHealth;
 
   /// Bu sonucun ön kontrol durumu; null = rozet yok.
   final _HealthState? health;
@@ -1005,6 +1001,28 @@ class _SearchResultCardState extends State<_SearchResultCard> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  Tooltip(
+                    message: AppLocalizations.of(
+                      context,
+                    ).searchHealthCheckTooltip,
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.health_and_safety_outlined,
+                        size: 18,
+                        color: foreground.withValues(alpha: 0.55),
+                      ),
+                      onPressed: widget.enabled &&
+                              widget.health is! _HealthChecking
+                          ? widget.onCheckHealth
+                          : null,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
                   if (sizeText != null)
                     Text(
                       sizeText,

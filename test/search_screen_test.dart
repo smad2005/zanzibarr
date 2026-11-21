@@ -333,6 +333,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
+    Future<void> checkCard(WidgetTester tester, int index) async {
+      await tester.tap(find.byTooltip('NZB sağlığını kontrol et').at(index));
+      await tester.pump();
+    }
+
     testWidgets('iyi ve eksik sonuçlar renkli rozetle belirtilir', (
       tester,
     ) async {
@@ -354,8 +359,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _enterQueryAndSearch(tester, 'film');
+      await checkCard(tester, 0);
+      await checkCard(tester, 1);
+      await tester.pumpAndSettle();
 
-      // Tarama bitti: ilk sonuç sağlam, ikincisi eksik.
+      // İki kart da elle denetlendi: ilki sağlam, ikincisi eksik.
       expect(find.text('İyi'), findsOneWidget);
       expect(find.text('Eksik'), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
@@ -390,6 +398,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _enterQueryAndSearch(tester, 'film');
+      await checkCard(tester, 0);
+      await checkCard(tester, 1);
+      await tester.pumpAndSettle();
 
       expect(find.text('Onarılabilir'), findsNWidgets(2));
       expect(find.byIcon(Icons.healing_rounded), findsNWidgets(2));
@@ -420,12 +431,15 @@ void main() {
       );
       await tester.pumpAndSettle();
       await searchWithoutSettle(tester, 'film');
+      await checkCard(tester, 0);
 
       // İlk öğenin denetimi askıda: kart spinner taşıyor.
       expect(healthCalls, 1);
       expect(find.byType(CircularProgressIndicator), findsWidgets);
 
       gate.complete();
+      await tester.pumpAndSettle();
+      await checkCard(tester, 1);
       await tester.pumpAndSettle();
       expect(find.text('İyi'), findsNWidgets(2));
     });
@@ -442,6 +456,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _enterQueryAndSearch(tester, 'film');
+      await checkCard(tester, 0);
+      await checkCard(tester, 1);
+      await tester.pumpAndSettle();
 
       expect(find.text('İyi'), findsNothing);
       expect(find.text('Eksik'), findsNothing);
@@ -467,6 +484,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _enterQueryAndSearch(tester, 'film');
+      await checkCard(tester, 0);
+      await tester.pumpAndSettle();
 
       // Sağlayıcı olmadan ne indirme ne denetim yapılır.
       expect(downloadCalls, 0);
@@ -495,15 +514,17 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _enterQueryAndSearch(tester, 'film');
+      await checkCard(tester, 0);
+      await tester.pumpAndSettle();
 
-      // Tarama her sonuç için bir kez indirdi.
-      expect(downloadCalls, 2);
+      // Elle denetim o sonucun NZB'sini bir kez indirdi.
+      expect(downloadCalls, 1);
 
       await tester.tap(find.text('Bir.Film.2024.2160p.WEB-DL.DV.HEVC-GRP'));
       await tester.pumpAndSettle();
 
       // Oynatma aynı yolu yeniden kullandı: ek indirme yok.
-      expect(downloadCalls, 2);
+      expect(downloadCalls, 1);
       expect(playedPath, '/tmp/bir-film.nzb');
     });
 
@@ -532,13 +553,16 @@ void main() {
       );
       await tester.pumpAndSettle();
       await searchWithoutSettle(tester, 'film');
+      await checkCard(tester, 0);
 
       // İlk denetim askında: spinner var, rozet yok.
       expect(find.text('İyi'), findsNothing);
       expect(find.text('Eksik'), findsNothing);
 
-      // Yeni arama: kuşak geçersiz; yeni tarama hızlı raporlarla biter.
+      // Yeni arama: kuşak geçersiz; elle denetim yeni raporlarla biter.
       await searchWithoutSettle(tester, 'yeni sorgu');
+      await checkCard(tester, 0);
+      await checkCard(tester, 1);
       await tester.pumpAndSettle();
       expect(find.text('İyi'), findsNWidgets(2));
       expect(find.text('Eksik'), findsNothing);

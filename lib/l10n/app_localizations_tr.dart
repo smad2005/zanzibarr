@@ -920,6 +920,9 @@ class AppLocalizationsTr extends AppLocalizations {
       'NZB listesinde bazı arşiv ciltleri eksik';
 
   @override
+  String get searchHealthCheckTooltip => 'NZB sağlığını kontrol et';
+
+  @override
   String get subtitleSearchTooltip => 'Altyazıları çevrimiçi ara';
 
   @override
