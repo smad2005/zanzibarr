@@ -13,6 +13,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Android TV: dokunmatik ekranı olmayan cihazlara (TV box) kurulabilsin;
          telefon/tablet desteği de korunur (required=false). -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
@@ -92,6 +96,10 @@
             android:name="flutterEmbedding"
             android:value="2" />
         <!-- OTA güncelleme: indirilen APK'yı sistem yükleyicisine verir. -->
+        <service
+            android:name=".CastKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice"/>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.zanzibarr.zanzibarr.fileprovider"

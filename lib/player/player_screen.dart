@@ -12,6 +12,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../cast/cast_device_picker.dart';
+import '../cast/cast_keep_alive.dart';
 import '../cast/cast_service.dart';
 import '../l10n/app_localizations.dart';
 import '../settings/opensubtitles_settings.dart';
@@ -1207,6 +1208,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       _castSession = session;
       _castDeviceName = device.name;
+      unawaited(
+        CastKeepAlive.instance.start(
+          title: _info?.filename ?? stream.filename,
+          device: device.name,
+        ),
+      );
       _castPositionSubscription = session.positionStream.listen((position) {
         if (!mounted || !_casting || _scrubbing) return;
         setState(() => _position = position);
@@ -1259,6 +1266,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (session == null) return;
     _castSession = null;
     _castDeviceName = null;
+    unawaited(CastKeepAlive.instance.stop());
     await _castPositionSubscription?.cancel();
     await _castDurationSubscription?.cancel();
     await _castStateSubscription?.cancel();
@@ -1535,6 +1543,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _historySaveTimer?.cancel();
     // Cast oturumu ekranla birlikte kapanır; alıcıya stop gönderilir.
     _castSession = null;
+    unawaited(CastKeepAlive.instance.stop());
     _castPositionSubscription?.cancel();
     _castDurationSubscription?.cancel();
     _castStateSubscription?.cancel();

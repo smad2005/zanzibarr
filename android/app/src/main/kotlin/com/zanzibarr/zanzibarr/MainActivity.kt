@@ -61,6 +61,24 @@ class MainActivity : FlutterActivity() {
                 }
             }
         // OTA güncelleme: indirilen APK'nın sistem yükleyicisiyle kurulması.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.zanzibarr/cast_keep_alive")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        CastKeepAliveService.start(
+                            this,
+                            call.argument<String>("title").orEmpty(),
+                            call.argument<String>("device").orEmpty(),
+                        )
+                        result.success(null)
+                    }
+                    "stop" -> {
+                        CastKeepAliveService.stop(this)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "zanzibarr/updater")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
