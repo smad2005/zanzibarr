@@ -871,21 +871,21 @@ class AppLocalizationsTr extends AppLocalizations {
   String get rssRemoveFavorite => 'Favorilerden çıkar';
 
   @override
-  String get upNextTitle => 'S─▒radaki b├╢l├╝m';
+  String get upNextTitle => 'Sıradaki bölüm';
 
   @override
   String upNextStarting(Object seconds) {
-    return '$seconds sn i├зinde ba┼Яl─▒yor';
+    return '$seconds sn içinde başlıyor';
   }
 
   @override
-  String get upNextPlayNow => '┼Юimdi oynat';
+  String get upNextPlayNow => 'Şimdi oynat';
 
   @override
-  String get upNextFinish => 'B├╢l├╝m├╝ bitir';
+  String get upNextFinish => 'Bölümü bitir';
 
   @override
-  String get upNextClearQueue => 'Kuyru─Яu temizle';
+  String get upNextClearQueue => 'Kuyruğu temizle';
 
   @override
   String get entryWatchedTooltip => 'İzlendi';

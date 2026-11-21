@@ -8,6 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `check_status`, `file_to_search_item`, `map_http_error`, `run_search`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `EasynewsOutcome`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`
 
 /// Arama sonucunun NZB'sini `dl-nzb` ucundan üretip `download_dir` altına
 /// yazar; dosya YOLU döner. `nzb_url`, arama sonucundaki `easynews:` getiri

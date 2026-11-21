@@ -730,6 +730,7 @@ class MediaPreferencesStore {
 
   Future<void> saveShowChapters(bool value) =>
       _storage.write(showChaptersKey, '$value');
+}
 
 double _finiteOr(double value, double fallback) =>
     value.isFinite ? value : fallback;

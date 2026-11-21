@@ -68,7 +68,7 @@ class _RssScreenState extends State<RssScreen> {
   static Future<String> _defaultDownload(String nzbUrl, String title) async {
     final cacheDir = await getTemporaryDirectory();
     return newznabDownloadNzb(
-      config: const IndexerConfigDto(baseUrl: '', apiKey: ''),
+      config: const IndexerConfigDto(id: '', baseUrl: '', apiKey: ''),
       nzbUrl: nzbUrl,
       suggestedName: title,
       downloadDir: cacheDir.path,
