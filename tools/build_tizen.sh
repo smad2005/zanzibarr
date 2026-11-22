@@ -62,14 +62,26 @@ export TARGET_CC="$CC_armv7_unknown_linux_gnueabi"
 export TARGET_AR="$AR_armv7_unknown_linux_gnueabi"
 export TARGET_CFLAGS="$CFLAGS_armv7_unknown_linux_gnueabi"
 export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABI_LINKER="$TOOLCHAIN/bin/$TRIPLE-g++"
+LIBSTDCXX_A="$("$CXX_armv7_unknown_linux_gnueabi" $TUNE -print-file-name=libstdc++.a)"
+if [[ "$LIBSTDCXX_A" == "libstdc++.a" || ! -f "$LIBSTDCXX_A" ]]; then
+  echo "error: the Tizen toolchain does not provide libstdc++.a" >&2
+  exit 1
+fi
+STDCXX_DIR="$WORK/.tizen-static-stdcxx"
+mkdir -p "$STDCXX_DIR"
+cp "$LIBSTDCXX_A" "$STDCXX_DIR/libstdc++.a"
+# rustc emits its native -lstdc++ records before user link arguments. Put an
+# archive-only directory first so every record resolves statically regardless
+# of argument order; -static-libstdc++ alone is insufficient with rustc's
+# -nodefaultlibs link.
 export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABI_RUSTFLAGS="\
+-L native=$STDCXX_DIR \
 -C link-arg=--sysroot=$SYSROOT \
 -C link-arg=-march=armv7-a \
 -C link-arg=-mtune=cortex-a8 \
 -C link-arg=-mthumb \
 -C link-arg=-mfpu=vfpv3-d16 \
 -C link-arg=-mfloat-abi=softfp \
--C link-arg=-Wl,-rpath,\$ORIGIN/lib \
 -C link-arg=-Wl,-soname,librust_lib_zanzibarr.so"
 
 cargo build \
@@ -79,14 +91,8 @@ cargo build \
 
 ENGINE="$WORK/rust/target/$RUST_TARGET/release/librust_lib_zanzibarr.so"
 test -f "$ENGINE"
-LIBSTDCXX="$(find -L "$SYSROOT" -name 'libstdc++.so.6' -type f -print -quit)"
-test -n "$LIBSTDCXX" || {
-  echo "error: the Tizen sysroot does not provide libstdc++.so.6" >&2
-  exit 1
-}
 mkdir -p "$WORK/tizen/lib"
 cp "$ENGINE" "$WORK/tizen/lib/"
-cp "$LIBSTDCXX" "$WORK/tizen/lib/"
 if [[ "$API" == "10.0" ]]; then
   cp "$WORK/tizen/tizen-manifest-10.0.xml" "$WORK/tizen/tizen-manifest.xml"
 fi

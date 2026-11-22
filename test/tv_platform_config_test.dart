@@ -71,6 +71,7 @@ void main() {
     expect(pluginPubspec, contains('webos:\n        ffiPlugin: true'));
     expect(cmake, contains('rust_lib_zanzibarr_bundled_libraries'));
     expect(cmake, contains('lib/librust_lib_zanzibarr.so'));
+    expect(cmake, contains('lib/libstdc++.so.6'));
   });
 
   test('TV build and preparation scripts have valid shell syntax', () {
@@ -78,6 +79,7 @@ void main() {
       'tools/prepare_tv_workdir.sh',
       'tools/build_tizen.sh',
       'tools/build_webos.sh',
+      'tools/verify_tv_package.sh',
     ]) {
       final result = Process.runSync('bash', ['-n', script]);
       expect(result.exitCode, 0, reason: '$script: ${result.stderr}');

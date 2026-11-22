@@ -5,7 +5,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import '../src/rust/frb_generated.dart';
 
 /// Loads the shared Rust engine, using Tizen's absolute app-library path when
-/// available. webOS uses its bundled $ORIGIN/lib RPATH like desktop Linux.
+/// available. webOS resolves the engine and its sibling runtime through the
+/// engine's `$ORIGIN` RPATH.
 Future<void> initializeNativeRustEngine() {
   const tvOs = String.fromEnvironment('ZANZIBARR_TV_OS');
   if (tvOs == 'tizen') {

@@ -18,11 +18,6 @@ if [[ "$KIND" == "tizen" ]]; then
     echo "error: Rust engine is missing from $PKG" >&2
     exit 1
   }
-  CPP_ENTRY="$(unzip -Z1 "$PKG" | awk '/libstdc\+\+.so.6/{print; exit}')"
-  test -n "$CPP_ENTRY" || {
-    echo "error: the bundled libstdc++.so.6 runtime is missing from $PKG" >&2
-    exit 1
-  }
   unzip -p "$PKG" "$ENTRY" > "$TMP/engine.so"
 else
   ar t "$PKG"
@@ -38,7 +33,12 @@ fi
 file "$TMP/engine.so"
 readelf -h "$TMP/engine.so" | grep -q 'ARM'
 readelf -d "$TMP/engine.so" | grep -q 'SONAME.*librust_lib_zanzibarr.so'
-readelf -d "$TMP/engine.so" | grep -E 'RPATH|RUNPATH' | grep -F '$ORIGIN/lib' >/dev/null
+if [[ "$KIND" == "webos" ]]; then
+  readelf -d "$TMP/engine.so" | grep -E 'RPATH|RUNPATH' | grep -F '[$ORIGIN]' >/dev/null
+elif readelf -d "$TMP/engine.so" | grep -q 'NEEDED.*libstdc++'; then
+  echo "error: dynamic libstdc++ dependency leaked into the Tizen package" >&2
+  exit 1
+fi
 if readelf -A "$TMP/engine.so" | grep -qi 'Tag_ABI_VFP_args: VFP registers'; then
   echo "error: hard-float ABI detected; Tizen/webOS require softfp" >&2
   exit 1

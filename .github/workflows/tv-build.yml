@@ -53,7 +53,7 @@ jobs:
           if [[ "${{ matrix.api }}" == "6.0" ]]; then
             "$PM" install IOT-Headed-6.0-NativeAppDevelopment-CLI
           else
-            "$PM" install NativeToolchain-Gcc-14.2 TV-Samsung-10.0-NativeAppDevelopment-CLI
+            "$PM" install NativeToolchain-Gcc-14.2 TIZEN-10.0-NativeAppDevelopment-CLI
           fi
 
       - name: Install flutter-tizen and inspect the toolchain
@@ -62,7 +62,7 @@ jobs:
           export PATH="$FLUTTER_TIZEN_HOME/bin:$PATH"
           flutter-tizen doctor -v
           "$TIZEN_SDK/package-manager/package-manager-cli.bin" show-pkgs | \
-            grep -E 'Gcc|TV-Samsung|IOT-Headed' || true
+            grep -E 'Gcc|TIZEN-|TV-Samsung|IOT-Headed' || true
 
       - name: Create a CI-only signing profile
         run: |

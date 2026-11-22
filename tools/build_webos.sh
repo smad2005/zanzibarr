@@ -60,7 +60,7 @@ export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABI_RUSTFLAGS="\
 -C link-arg=-mthumb \
 -C link-arg=-mfpu=neon \
 -C link-arg=-mfloat-abi=softfp \
--C link-arg=-Wl,-rpath,\$ORIGIN/lib \
+-C link-arg=-Wl,-rpath,\$ORIGIN \
 -C link-arg=-Wl,-soname,librust_lib_zanzibarr.so"
 
 cargo build \
@@ -70,11 +70,11 @@ cargo build \
 
 ENGINE="$WORK/rust/target/$RUST_TARGET/release/librust_lib_zanzibarr.so"
 test -f "$ENGINE"
-LIBSTDCXX="$(find -L "$SDKTARGETSYSROOT" -name 'libstdc++.so.6' -type f -print -quit)"
-test -n "$LIBSTDCXX" || {
+LIBSTDCXX="$("$GXX_BIN" $TUNE -print-file-name=libstdc++.so.6)"
+if [[ "$LIBSTDCXX" == "libstdc++.so.6" || ! -f "$LIBSTDCXX" ]]; then
   echo "error: the webOS NDK does not provide libstdc++.so.6" >&2
   exit 1
-}
+fi
 mkdir -p "$WORK/rust_builder/webos/lib"
 cp "$ENGINE" "$WORK/rust_builder/webos/lib/"
 cp "$LIBSTDCXX" "$WORK/rust_builder/webos/lib/"
