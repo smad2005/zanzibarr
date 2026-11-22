@@ -61,6 +61,9 @@ export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABI_RUSTFLAGS="\
 -C link-arg=-mfpu=neon \
 -C link-arg=-mfloat-abi=softfp \
 -C link-arg=-static-libstdc++ \
+-C link-arg=-Wl,-Bstatic \
+-C link-arg=-lstdc++ \
+-C link-arg=-Wl,-Bdynamic \
 -C link-arg=-Wl,-soname,librust_lib_zanzibarr.so"
 
 cargo build \

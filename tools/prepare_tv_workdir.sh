@@ -28,5 +28,5 @@ rsync -a --delete \
   --exclude=kimi-export-\* \
   "$ROOT/" "$WORK/"
 
-python3 "$ROOT/tools/configure_tv_pubspec.py" "$WORK" "$PLATFORM"
+dart "$ROOT/tools/configure_tv_pubspec.dart" "$WORK" "$PLATFORM"
 printf '%s\n' "$WORK"

@@ -9,8 +9,8 @@ void main() {
       final work = Directory.systemTemp.createTempSync('zanzibarr-profile');
       try {
         File('pubspec.yaml').copySync('${work.path}/pubspec.yaml');
-        final result = Process.runSync('python3', [
-          'tools/configure_tv_pubspec.py',
+        final result = Process.runSync('dart', [
+          'tools/configure_tv_pubspec.dart',
           work.path,
           platform,
         ]);

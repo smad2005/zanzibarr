@@ -33,6 +33,7 @@ file "$TMP/engine.so"
 readelf -h "$TMP/engine.so" | grep -q 'ARM'
 readelf -d "$TMP/engine.so" | grep -q 'SONAME.*librust_lib_zanzibarr.so'
 if readelf -d "$TMP/engine.so" | grep -q 'libstdc++'; then
+  readelf -d "$TMP/engine.so" >&2
   echo "error: dynamic libstdc++ dependency leaked into the TV package" >&2
   exit 1
 fi

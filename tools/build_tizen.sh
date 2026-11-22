@@ -22,7 +22,7 @@ if [[ "$API" == "6.0" ]]; then
   DEFAULT_SYSROOT="$TIZEN_SDK/platforms/tizen-6.0/iot-headed/rootstraps/iot-headed-6.0-device.core"
 else
   GCC_VERSION="${TIZEN_GCC_VERSION:-14.2}"
-  DEFAULT_SYSROOT="$TIZEN_SDK/platforms/tizen-10.0/tv-samsung/rootstraps/tv-samsung-10.0-device.core"
+  DEFAULT_SYSROOT="$TIZEN_SDK/platforms/tizen-10.0/tizen/rootstraps/tizen-10.0-device.core"
 fi
 TOOLCHAIN="${TIZEN_TOOLCHAIN:-$TIZEN_SDK/tools/arm-linux-gnueabi-gcc-$GCC_VERSION}"
 SYSROOT="${TIZEN_SYSROOT:-$DEFAULT_SYSROOT}"
@@ -70,6 +70,9 @@ export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABI_RUSTFLAGS="\
 -C link-arg=-mfpu=vfpv3-d16 \
 -C link-arg=-mfloat-abi=softfp \
 -C link-arg=-static-libstdc++ \
+-C link-arg=-Wl,-Bstatic \
+-C link-arg=-lstdc++ \
+-C link-arg=-Wl,-Bdynamic \
 -C link-arg=-Wl,-soname,librust_lib_zanzibarr.so"
 
 cargo build \

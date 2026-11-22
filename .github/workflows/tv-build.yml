@@ -47,8 +47,11 @@ jobs:
       - name: Install Tizen native packages (${{ matrix.api }})
         run: |
           PM="$TIZEN_SDK/package-manager/package-manager-cli.bin"
+          # flutter-tizen's baseline checks require these packages on both
+          # lines; Tizen 10 additionally needs the 2026 GCC 14.2 toolchain.
+          "$PM" install NativeToolchain-Gcc-9.2 IOT-Headed-6.0-NativeAppDevelopment
           if [[ "${{ matrix.api }}" == "6.0" ]]; then
-            "$PM" install NativeToolchain-Gcc-9.2 IOT-Headed-6.0-NativeAppDevelopment-CLI
+            "$PM" install IOT-Headed-6.0-NativeAppDevelopment-CLI
           else
             "$PM" install NativeToolchain-Gcc-14.2 TV-Samsung-10.0-NativeAppDevelopment-CLI
           fi
@@ -103,7 +106,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '16.20.2'
+          node-version: '24'
 
       - uses: dtolnay/rust-toolchain@stable
         with:
