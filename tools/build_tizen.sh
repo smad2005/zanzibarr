@@ -69,10 +69,7 @@ export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABI_RUSTFLAGS="\
 -C link-arg=-mthumb \
 -C link-arg=-mfpu=vfpv3-d16 \
 -C link-arg=-mfloat-abi=softfp \
--C link-arg=-static-libstdc++ \
--C link-arg=-Wl,-Bstatic \
--C link-arg=-lstdc++ \
--C link-arg=-Wl,-Bdynamic \
+-C link-arg=-Wl,-rpath,\$ORIGIN/lib \
 -C link-arg=-Wl,-soname,librust_lib_zanzibarr.so"
 
 cargo build \
@@ -82,8 +79,14 @@ cargo build \
 
 ENGINE="$WORK/rust/target/$RUST_TARGET/release/librust_lib_zanzibarr.so"
 test -f "$ENGINE"
+LIBSTDCXX="$(find -L "$SYSROOT" -name 'libstdc++.so.6' -type f -print -quit)"
+test -n "$LIBSTDCXX" || {
+  echo "error: the Tizen sysroot does not provide libstdc++.so.6" >&2
+  exit 1
+}
 mkdir -p "$WORK/tizen/lib"
 cp "$ENGINE" "$WORK/tizen/lib/"
+cp "$LIBSTDCXX" "$WORK/tizen/lib/"
 if [[ "$API" == "10.0" ]]; then
   cp "$WORK/tizen/tizen-manifest-10.0.xml" "$WORK/tizen/tizen-manifest.xml"
 fi
