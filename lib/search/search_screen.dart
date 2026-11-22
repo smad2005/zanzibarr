@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../player/player_screen.dart';
+import '../player/player_launcher.dart';
 import '../settings/indexer_settings.dart';
 import '../settings/provider_settings.dart';
 import '../settings/settings_screen.dart';
 import '../settings/ui_preferences.dart';
-import '../src/rust/api/easynews.dart' show EasynewsConfigDto, easynewsDownloadNzb;
+import '../src/rust/api/easynews.dart'
+    show EasynewsConfigDto, easynewsDownloadNzb;
 import '../src/rust/api/health.dart' show NzbHealthDto, checkNzbHealth;
 import '../src/rust/api/search.dart';
 import '../src/rust/api/streaming.dart' show ProviderConfigDto;
@@ -288,9 +289,9 @@ class _SearchScreenState extends State<SearchScreen> {
       // Sağlayıcı ayarları yalnız ön kontrol rozetleri için gereklidir;
       // depo beklenmedik biçimde yanıt vermezse (ör. test ortamı) arama
       // ve oynatma akışı ezilmesin diye kısa bir zaman aşımı koruması var.
-      provider = await _providerStore
-          .load()
-          .timeout(const Duration(seconds: 3));
+      provider = await _providerStore.load().timeout(
+        const Duration(seconds: 3),
+      );
     } catch (_) {
       // Sağlayıcı ayarı okunamazsa ön kontrol sessizce kapalı kalır.
     }
@@ -307,14 +308,14 @@ class _SearchScreenState extends State<SearchScreen> {
   /// kayıt sırasıyla (tekilleştirme baştaki hesabı tercih eder — kullanıcı
   /// öncelik sırasını ayarlardaki liste sırasıyla belirler).
   List<IndexerConfigDto> get _searchIndexers => [
-        for (final profile in _indexerProfiles)
-          if (profile.searchable)
-            IndexerConfigDto(
-              id: profile.id,
-              baseUrl: profile.baseUrl,
-              apiKey: profile.apiKey,
-            ),
-      ];
+    for (final profile in _indexerProfiles)
+      if (profile.searchable)
+        IndexerConfigDto(
+          id: profile.id,
+          baseUrl: profile.baseUrl,
+          apiKey: profile.apiKey,
+        ),
+  ];
 
   /// Indexer kaynakları hazır mı (hazır olmayan kaynak aramaya katılmaz).
   bool get _indexerReady => _searchIndexers.isNotEmpty;
@@ -397,10 +398,12 @@ class _SearchScreenState extends State<SearchScreen> {
   IndexerConfigDto _configForItem(SearchItemDto item) {
     final profiles = _indexerProfiles;
     final byId = profiles.where((p) => p.id == item.sourceId).toList();
-    final fallback =
-        profiles.where((p) => p.searchable).toList(growable: false);
-    final profile =
-        byId.isNotEmpty ? byId.first : (fallback.isEmpty ? null : fallback.first);
+    final fallback = profiles
+        .where((p) => p.searchable)
+        .toList(growable: false);
+    final profile = byId.isNotEmpty
+        ? byId.first
+        : (fallback.isEmpty ? null : fallback.first);
     if (profile == null) {
       return const IndexerConfigDto(id: '', baseUrl: '', apiKey: '');
     }
@@ -459,7 +462,9 @@ class _SearchScreenState extends State<SearchScreen> {
         onDownloaded(path);
       } else {
         await Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => PlayerScreen(nzbPath: path)),
+          MaterialPageRoute<void>(
+            builder: (_) => PlayerLauncher.create(nzbPath: path),
+          ),
         );
       }
     } catch (error) {
@@ -490,9 +495,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _runQuery(String query) async {
     if (_searching) return;
     _queryController.text = query;
-    _queryController.selection = TextSelection.collapsed(
-      offset: query.length,
-    );
+    _queryController.selection = TextSelection.collapsed(offset: query.length);
     await _search();
   }
 
@@ -596,10 +599,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   IconButton(
                     tooltip: l10n.saveSearchTooltip,
                     onPressed: _saveCurrentSearch,
-                    icon: const Icon(
-                      Icons.bookmark_add_outlined,
-                      size: 20,
-                    ),
+                    icon: const Icon(Icons.bookmark_add_outlined, size: 20),
                   ),
                 ],
               ],
@@ -782,10 +782,7 @@ class _SearchResultCardState extends State<_SearchResultCard> {
   /// Rozetin uzun basılabilir açıklaması: örnekleme, cilt ve PAR2 özeti.
   static String _healthTooltip(NzbHealthDto report, AppLocalizations l10n) {
     final lines = [
-      l10n.searchHealthSampled(
-        report.missingArticles,
-        report.sampledArticles,
-      ),
+      l10n.searchHealthSampled(report.missingArticles, report.sampledArticles),
       if (report.volumeGaps > 0) l10n.searchHealthMissingVolumes,
       if (report.par2Present)
         l10n.searchHealthPar2Blocks(report.par2RecoveryBlocks)
@@ -871,7 +868,9 @@ class _SearchResultCardState extends State<_SearchResultCard> {
     final foreground = Theme.of(context).colorScheme.onSurface;
     final accent = Theme.of(context).colorScheme.primary;
     final isTurkish = Localizations.localeOf(context).languageCode == 'tr';
-    final sizeText = item.sizeBytes == null ? null : _formatSize(item.sizeBytes!);
+    final sizeText = item.sizeBytes == null
+        ? null
+        : _formatSize(item.sizeBytes!);
     final ageText = item.publishedEpochSecs == null
         ? null
         : _formatAge(item.publishedEpochSecs!.toInt(), isTurkish);
@@ -931,8 +930,7 @@ class _SearchResultCardState extends State<_SearchResultCard> {
                         height: 1.25,
                       ),
                     ),
-                    if (item.badges.isNotEmpty ||
-                        widget.health != null) ...[
+                    if (item.badges.isNotEmpty || widget.health != null) ...[
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 5,
@@ -1162,7 +1160,8 @@ class _SearchError extends StatelessWidget {
 }
 
 /// Boş durum ipucu görünümü (henüz arama yapılmadı / sonuç yok).
-class _HintView extends StatelessWidget {  const _HintView({required this.icon, required this.message});
+class _HintView extends StatelessWidget {
+  const _HintView({required this.icon, required this.message});
 
   final IconData icon;
   final String message;
@@ -1303,11 +1302,7 @@ class _HistoryPanel extends StatelessWidget {
 /// Tek sorgu çipi: gövdeye dokununca arama; [onRemove] verilirse sağda küçük
 /// bir kaldırma düğmesi taşır (yalnız kayıtlı aramalarda).
 class _QueryChip extends StatelessWidget {
-  const _QueryChip({
-    required this.label,
-    required this.onTap,
-    this.onRemove,
-  });
+  const _QueryChip({required this.label, required this.onTap, this.onRemove});
 
   final String label;
   final VoidCallback onTap;
@@ -1337,12 +1332,11 @@ class _QueryChip extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    bookmarked
-                        ? Icons.bookmark_rounded
-                        : Icons.history_rounded,
+                    bookmarked ? Icons.bookmark_rounded : Icons.history_rounded,
                     size: 13,
-                    color: (bookmarked ? accent : foreground)
-                        .withValues(alpha: 0.6),
+                    color: (bookmarked ? accent : foreground).withValues(
+                      alpha: 0.6,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   ConstrainedBox(
@@ -1368,9 +1362,7 @@ class _QueryChip extends StatelessWidget {
               child: IconButton(
                 padding: EdgeInsets.zero,
                 iconSize: 13,
-                tooltip: AppLocalizations.of(
-                  context,
-                ).removeSavedSearchTooltip,
+                tooltip: AppLocalizations.of(context).removeSavedSearchTooltip,
                 icon: Icon(
                   Icons.close_rounded,
                   color: foreground.withValues(alpha: 0.5),

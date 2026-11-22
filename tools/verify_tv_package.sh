@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Verify the native engine inside a Tizen TPK or webOS IPK.
+set -euo pipefail
+
+if [[ $# -ne 2 || ( "$1" != "tizen" && "$1" != "webos" ) ]]; then
+  echo "usage: verify_tv_package.sh <tizen|webos> <package>" >&2
+  exit 2
+fi
+KIND="$1"
+PKG="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+test -f "$PKG"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+if [[ "$KIND" == "tizen" ]]; then
+  ENTRY="$(unzip -Z1 "$PKG" | awk '/librust_lib_zanzibarr.so/{print; exit}')"
+  test -n "$ENTRY" || {
+    echo "error: Rust engine is missing from $PKG" >&2
+    exit 1
+  }
+  unzip -p "$PKG" "$ENTRY" > "$TMP/engine.so"
+else
+  ar t "$PKG"
+  (
+    cd "$TMP"
+    ar x "$PKG"
+    tar -tzf data.tar.gz | grep 'librust_lib_zanzibarr.so' >/dev/null
+    tar -xOf data.tar.gz --wildcards '*/librust_lib_zanzibarr.so' > engine.so
+  )
+fi
+
+file "$TMP/engine.so"
+readelf -h "$TMP/engine.so" | grep -q 'ARM'
+readelf -d "$TMP/engine.so" | grep -q 'SONAME.*librust_lib_zanzibarr.so'
+if readelf -d "$TMP/engine.so" | grep -q 'libstdc++'; then
+  echo "error: dynamic libstdc++ dependency leaked into the TV package" >&2
+  exit 1
+fi
+if readelf -A "$TMP/engine.so" | grep -qi 'Tag_ABI_VFP_args: VFP registers'; then
+  echo "error: hard-float ABI detected; Tizen/webOS require softfp" >&2
+  exit 1
+fi
+
+echo "Native TV engine verified in $PKG"

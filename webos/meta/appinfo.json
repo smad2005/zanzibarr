@@ -1,0 +1,21 @@
+{
+  "id": "com.zanzibarr.zanzibarr",
+  "version": "2.1.0",
+  "vendor": "Enver Anil Karakoc",
+  "type": "native",
+  "main": "zanzibarr",
+  "title": "Zanzibarr",
+  "icon": "icon.png",
+  "iconColor": "#ffffff",
+  "largeIcon": "icon.png",
+  "handlesRelaunch": true,
+  "visible": true,
+  "defaultWindowType": "card",
+  "trustLevel": "default",
+  "locationHint": "none",
+  "noSplashOnLaunch": true,
+  "spinnerOnLaunch": false,
+  "transparent": true,
+  "uiRevision": 2,
+  "requiredACG": []
+}

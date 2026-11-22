@@ -32,3 +32,5 @@ flutter:
         ffiPlugin: true
       windows:
         ffiPlugin: true
+      webos:
+        ffiPlugin: true

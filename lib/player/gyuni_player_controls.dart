@@ -6,6 +6,9 @@ import 'package:media_kit/media_kit.dart';
 
 import '../l10n/app_localizations.dart';
 import 'chapter.dart';
+import 'player_format.dart';
+
+export 'player_format.dart' show formatPlayerDuration, formatPlayerRate;
 
 const _accent = Color(0xFFFF453A);
 
@@ -1398,18 +1401,6 @@ String trackLabel(
         (codec?.trim().isEmpty ?? true))
       '#$id',
   ].join(' · ');
-}
-
-String formatPlayerRate(double rate) => rate == rate.roundToDouble()
-    ? rate.toStringAsFixed(0)
-    : rate.toStringAsFixed(rate * 10 == (rate * 10).roundToDouble() ? 1 : 2);
-
-String formatPlayerDuration(Duration duration) {
-  final safe = duration.isNegative ? Duration.zero : duration;
-  final hours = safe.inHours;
-  final minutes = safe.inMinutes.remainder(60).toString().padLeft(2, '0');
-  final seconds = safe.inSeconds.remainder(60).toString().padLeft(2, '0');
-  return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
 }
 
 class _TimelineThumbShape extends SliderComponentShape {

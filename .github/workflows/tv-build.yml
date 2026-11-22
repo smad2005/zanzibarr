@@ -1,0 +1,145 @@
+name: TV build
+
+# Samsung Tizen TV and LG webOS 26 Re:New+ release candidates.
+# Real-device validation is a separate owner step; these jobs prove packaging
+# and native ARM/softfp compatibility without using production credentials.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  tizen:
+    name: Tizen ${{ matrix.api }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: ['6.0', '10.0']
+    env:
+      TIZEN_SDK: /home/runner/tizen-studio
+      FLUTTER_TIZEN_HOME: /home/runner/work/flutter-tizen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabi
+
+      - name: Install host dependencies
+        run: |
+          sudo add-apt-repository ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y libncurses5 python3.8 libpython3.8 gettext \
+            libkf5itemmodels5 libkf5kiowidgets5 libkchart2 dbus-x11 gnome-keyring rsync
+
+      - name: Install Tizen SDK
+        run: |
+          curl -fsSL https://download.tizen.org/sdk/Installer/tizen-sdk_10.0/web-cli_Tizen_SDK_10.0_ubuntu-64.bin -o /tmp/tizen-install.bin
+          chmod +x /tmp/tizen-install.bin
+          /tmp/tizen-install.bin --accept-license "$TIZEN_SDK"
+          rm /tmp/tizen-install.bin
+
+      - name: Install Tizen native packages (${{ matrix.api }})
+        run: |
+          PM="$TIZEN_SDK/package-manager/package-manager-cli.bin"
+          if [[ "${{ matrix.api }}" == "6.0" ]]; then
+            "$PM" install NativeToolchain-Gcc-9.2 IOT-Headed-6.0-NativeAppDevelopment-CLI
+          else
+            "$PM" install NativeToolchain-Gcc-14.2 TV-Samsung-10.0-NativeAppDevelopment-CLI
+          fi
+
+      - name: Install flutter-tizen and inspect the toolchain
+        run: |
+          git clone --depth 1 https://github.com/flutter-tizen/flutter-tizen.git "$FLUTTER_TIZEN_HOME"
+          export PATH="$FLUTTER_TIZEN_HOME/bin:$PATH"
+          flutter-tizen doctor -v
+          "$TIZEN_SDK/package-manager/package-manager-cli.bin" show-pkgs | \
+            grep -E 'Gcc|TV-Samsung|IOT-Headed' || true
+
+      - name: Create a CI-only signing profile
+        run: |
+          export PATH="$PATH:$TIZEN_SDK/tools/ide/bin"
+          dbus-run-session -- bash -c '
+            echo TESTPASS123 | gnome-keyring-daemon --unlock &&
+            tizen certificate -a tizen -p TESTPASS123 -f tizen &&
+            tizen security-profiles add \
+              -n tizen \
+              -a "$HOME/tizen-studio-data/keystore/author/tizen.p12" \
+              -p TESTPASS123
+          '
+
+      - name: Build Tizen TPK (${{ matrix.api }})
+        run: |
+          export PATH="$FLUTTER_TIZEN_HOME/bin:$PATH"
+          dbus-run-session -- bash -c '
+            echo TESTPASS123 | gnome-keyring-daemon --unlock &&
+            tools/build_tizen.sh "${1}"
+          ' -- "${{ matrix.api }}"
+
+      - name: Verify native engine in TPK
+        run: tools/verify_tv_package.sh tizen "dist/tizen/zanzibarr-tizen-${{ matrix.api }}-arm.tpk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zanzibarr-tizen-${{ matrix.api }}-arm
+          path: dist/tizen/zanzibarr-tizen-${{ matrix.api }}-arm.tpk
+          retention-days: 14
+
+  webos:
+    name: webOS 26
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      FLUTTER_WEBOS_HOME: /home/runner/work/flutter-webos
+      WEBOS_FLUTTER_NDK_ENV: /usr/local/starfish-sdk-x86_64/environment-setup-ca9v1-webosmllib32-linux-gnueabi
+      WEBOS_NDK_ACCEPT_EULA: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '16.20.2'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabi
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl unzip cmake pkg-config file libgtk-3-0 \
+            libgtk-3-dev ninja-build clang git-lfs rsync
+
+      - name: Install webOS NDK (owner-approved LG SDK license)
+        run: |
+          curl -fsSL https://github.com/lg-flutter-webos/ndk/releases/download/11.2.0/webos-ndk-flutter-starfish-x86_64-ca9v1-11.2.0.sh -o /tmp/webos-ndk.sh
+          chmod +x /tmp/webos-ndk.sh
+          sudo --preserve-env=WEBOS_NDK_ACCEPT_EULA /tmp/webos-ndk.sh -y
+          rm /tmp/webos-ndk.sh
+
+      - name: Install ares and flutter-webOS
+        run: |
+          npm install -g @webos-tools/cli
+          ares -V
+          git clone --depth 1 https://github.com/lg-flutter-webos/flutter-webos.git "$FLUTTER_WEBOS_HOME"
+          export PATH="$FLUTTER_WEBOS_HOME/bin:$PATH"
+          flutter-webos doctor -v
+
+      - name: Build webOS IPK
+        run: |
+          export PATH="$FLUTTER_WEBOS_HOME/bin:$PATH"
+          tools/build_webos.sh
+
+      - name: Verify native engine in IPK
+        run: tools/verify_tv_package.sh webos "dist/webos/zanzibarr-webos26-arm.ipk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zanzibarr-webos26-arm
+          path: dist/webos/zanzibarr-webos26-arm.ipk
+          retention-days: 14
