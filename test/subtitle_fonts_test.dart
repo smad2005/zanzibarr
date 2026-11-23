@@ -35,6 +35,27 @@ void main() {
     }
   });
 
+  test('picker fonts contain the music glyphs', () async {
+    const musicGlyphs = ['♩', '♪', '♫', '♬', '♭', '♮', '♯'];
+    for (final font in kSubtitleFonts) {
+      final data = await rootBundle.load(font.asset);
+      for (final glyph in musicGlyphs) {
+        final codepoint = glyph.codeUnitAt(0);
+        expect(
+          _hasGlyph(ByteData.sublistView(data), codepoint),
+          isTrue,
+          reason: '${font.family} is missing '
+              'U+${codepoint.toRadixString(16).toUpperCase()}. Run '
+              '"npm install --prefix tools && '
+              'node tools/patch_subtitle_fonts.js" to merge the music glyphs '
+              'from tools/fonts/ into the bundled subtitle TTFs; do not add a '
+              'separate fallback file — Android libass uses provider=none '
+              'and will not fall back to another loaded face.',
+        );
+      }
+    }
+  });
+
   test('resolver extracts every selected and fallback font', () async {
     const channel = MethodChannel('plugins.flutter.io/path_provider');
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -77,7 +98,7 @@ bool _hasGlyph(ByteData bytes, int codepoint) {
 bool _hasGlyphFormat4(ByteData bytes, int table, int codepoint) {
   final segments = _u16(bytes, table + 6) ~/ 2;
   final ends = table + 14;
-  final starts = ends + segments * 2;
+  final starts = ends + segments * 2 + 2;
   final deltas = starts + segments * 2;
   final rangeOffsets = deltas + segments * 2;
   for (var segment = 0; segment < segments; segment++) {

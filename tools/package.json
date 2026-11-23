@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Build helpers for zanzibarr",
+  "dependencies": {
+    "opentype.js": "^2.0.0"
+  }
+}
