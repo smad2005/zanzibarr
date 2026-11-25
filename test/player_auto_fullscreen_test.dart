@@ -48,4 +48,45 @@ void main() {
     expect(_decide(fullscreen: true), isFalse);
     expect(_decide(pictureInPicture: true), isFalse);
   });
+
+  test('enters fullscreen at startup when already in landscape', () {
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      expect(
+        shouldAutoEnterFullscreenOnReady(
+          platform: platform,
+          orientation: Orientation.landscape,
+          pictureInPicture: false,
+          fullscreen: false,
+        ),
+        isTrue,
+        reason: '$platform',
+      );
+    }
+  });
+
+  test('startup check skips portrait, desktop, PiP and existing fullscreen', () {
+    bool decide({
+      TargetPlatform platform = TargetPlatform.android,
+      Orientation orientation = Orientation.landscape,
+      bool pictureInPicture = false,
+      bool fullscreen = false,
+    }) =>
+        shouldAutoEnterFullscreenOnReady(
+          platform: platform,
+          orientation: orientation,
+          pictureInPicture: pictureInPicture,
+          fullscreen: fullscreen,
+        );
+
+    expect(decide(orientation: Orientation.portrait), isFalse);
+    for (final platform in [
+      TargetPlatform.macOS,
+      TargetPlatform.windows,
+      TargetPlatform.linux,
+    ]) {
+      expect(decide(platform: platform), isFalse, reason: '$platform');
+    }
+    expect(decide(pictureInPicture: true), isFalse);
+    expect(decide(fullscreen: true), isFalse);
+  });
 }

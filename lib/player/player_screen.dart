@@ -57,6 +57,18 @@ bool shouldAutoEnterFullscreen({
     !pictureInPicture &&
     !fullscreen;
 
+@visibleForTesting
+bool shouldAutoEnterFullscreenOnReady({
+  required TargetPlatform platform,
+  required Orientation orientation,
+  required bool pictureInPicture,
+  required bool fullscreen,
+}) =>
+    (platform == TargetPlatform.android || platform == TargetPlatform.iOS) &&
+    orientation == Orientation.landscape &&
+    !pictureInPicture &&
+    !fullscreen;
+
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -940,6 +952,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     _revealControls();
     _startHistoryTracking();
     _debugProbeDumpIfRequested();
+    if (shouldAutoEnterFullscreenOnReady(
+      platform: defaultTargetPlatform,
+      orientation: _viewOrientation(),
+      pictureInPicture: _isPictureInPicture || _pictureInPictureEntering,
+      fullscreen: isFullscreen,
+    )) {
+      unawaited(_videoKey.currentState?.enterFullscreen());
+    }
   }
 
   /// Teşhis kancası (ZANZIBARR_DEBUG_PROBE=1): oynatma hazır olunca video
@@ -3048,26 +3068,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           Icons.subtitles_rounded,
           'S',
         ),
-        _contextItem(
-          _PlayerContextAction.loopA,
-          l10n.loopSetA,
-          Icons.looks_one_outlined,
-          '',
-        ),
-        _contextItem(
-          _PlayerContextAction.loopB,
-          l10n.loopSetB,
-          Icons.looks_two_outlined,
-          '',
-          enabled: _playback.loopStart != null,
-        ),
-        if (_playback.loopStart != null)
-          _contextItem(
-            _PlayerContextAction.clearLoop,
-            l10n.loopClear,
-            Icons.clear_all_rounded,
-            '',
-          ),
         const PopupMenuDivider(),
         _contextItem(
           _PlayerContextAction.tuning,
