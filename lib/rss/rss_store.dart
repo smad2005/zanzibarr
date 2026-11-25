@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'rss_backup.dart';
 import 'rss_feed.dart';
 
 class RssStore {
@@ -37,6 +38,23 @@ class RssStore {
     key: _kTags,
     value: jsonEncode([for (final tag in tags) tag.toJson()]),
   );
+
+  Future<RssBackup> loadBackup() async => RssBackup(
+    feeds: await loadFeeds(),
+    tags: await loadTags(),
+    favorites: await loadFavorites(),
+  );
+
+  Future<void> applyBackup(
+    RssBackup backup, {
+    required bool feeds,
+    required bool tags,
+    required bool favorites,
+  }) async {
+    if (feeds) await saveFeeds(backup.feeds);
+    if (tags) await saveTags(backup.tags);
+    if (favorites) await saveFavorites(backup.favorites);
+  }
 
   static List<T> _decodeList<T>(String? raw, T? Function(Object?) fromJson) {
     if (raw == null || raw.isEmpty) return [];

@@ -879,6 +879,66 @@ class AppLocalizationsFr extends AppLocalizations {
   String get rssRemoveFavorite => 'Remove from favorites';
 
   @override
+  String get settingsRssTransferTitle => 'RSS import / export';
+
+  @override
+  String get settingsRssTransferHint =>
+      'Back up feeds, search tags and favorites to JSON, or restore them from a file.';
+
+  @override
+  String get settingsRssExport => 'Export to JSON';
+
+  @override
+  String get settingsRssImport => 'Import from JSON';
+
+  @override
+  String settingsRssExportDone(String path) {
+    return 'Exported to $path';
+  }
+
+  @override
+  String get settingsRssImportDone => 'RSS data imported';
+
+  @override
+  String settingsRssExportFailed(String error) {
+    return 'Could not export RSS data: $error';
+  }
+
+  @override
+  String settingsRssImportFailed(String error) {
+    return 'Could not import RSS data: $error';
+  }
+
+  @override
+  String get settingsRssImportInvalid =>
+      'The file is not a valid RSS backup JSON';
+
+  @override
+  String get settingsRssImportDialogTitle => 'Import RSS data';
+
+  @override
+  String get settingsRssImportDialogBody =>
+      'Choose what to restore. Selected items replace your current data.';
+
+  @override
+  String settingsRssImportFeeds(int count) {
+    return 'Feeds ($count)';
+  }
+
+  @override
+  String settingsRssImportTags(int count) {
+    return 'Tags ($count)';
+  }
+
+  @override
+  String settingsRssImportFavorites(int count) {
+    return 'Favorites ($count)';
+  }
+
+  @override
+  String get settingsRssImportConfirm => 'Import';
+
+  @override
   String get upNextTitle => 'Up next';
 
   @override

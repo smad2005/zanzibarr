@@ -463,5 +463,22 @@ void main() {
       );
       expect(store.saved.canSearch, isFalse);
     });
+
+    testWidgets('RSS yedek bölümü OpenSubtitles ayarlarından sonra görünür', (
+      tester,
+    ) async {
+      await tester.pumpWithL10n(
+        SettingsScreen(
+          store: _FakeProviderStore(),
+          indexerStore: _FakeIndexerStore(),
+          osStore: _FakeOpenSubtitlesStore(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _reveal(tester, find.text('RSS içe / dışa aktar'));
+      expect(find.text('JSON olarak dışa aktar'), findsOneWidget);
+      expect(find.text("JSON'dan içe aktar"), findsOneWidget);
+    });
   });
 }

@@ -875,6 +875,66 @@ class AppLocalizationsRu extends AppLocalizations {
   String get rssRemoveFavorite => 'Убрать из избранного';
 
   @override
+  String get settingsRssTransferTitle => 'Импорт / экспорт RSS';
+
+  @override
+  String get settingsRssTransferHint =>
+      'Сохраните ленты, поисковые теги и избранное в JSON или восстановите их из файла.';
+
+  @override
+  String get settingsRssExport => 'Экспорт в JSON';
+
+  @override
+  String get settingsRssImport => 'Импорт из JSON';
+
+  @override
+  String settingsRssExportDone(String path) {
+    return 'Экспортировано в $path';
+  }
+
+  @override
+  String get settingsRssImportDone => 'RSS-данные импортированы';
+
+  @override
+  String settingsRssExportFailed(String error) {
+    return 'Не удалось экспортировать RSS: $error';
+  }
+
+  @override
+  String settingsRssImportFailed(String error) {
+    return 'Не удалось импортировать RSS: $error';
+  }
+
+  @override
+  String get settingsRssImportInvalid =>
+      'Файл не является корректным JSON-бэкапом RSS';
+
+  @override
+  String get settingsRssImportDialogTitle => 'Импорт RSS-данных';
+
+  @override
+  String get settingsRssImportDialogBody =>
+      'Выберите, что восстановить. Выбранные разделы заменят текущие данные.';
+
+  @override
+  String settingsRssImportFeeds(int count) {
+    return 'Ленты ($count)';
+  }
+
+  @override
+  String settingsRssImportTags(int count) {
+    return 'Теги ($count)';
+  }
+
+  @override
+  String settingsRssImportFavorites(int count) {
+    return 'Избранное ($count)';
+  }
+
+  @override
+  String get settingsRssImportConfirm => 'Импортировать';
+
+  @override
   String get upNextTitle => 'Up next';
 
   @override

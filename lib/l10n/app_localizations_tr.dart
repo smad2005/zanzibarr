@@ -871,6 +871,65 @@ class AppLocalizationsTr extends AppLocalizations {
   String get rssRemoveFavorite => 'Favorilerden çıkar';
 
   @override
+  String get settingsRssTransferTitle => 'RSS içe / dışa aktar';
+
+  @override
+  String get settingsRssTransferHint =>
+      'Beslemeleri, arama etiketlerini ve favorileri JSON olarak yedekleyin veya bir dosyadan geri yükleyin.';
+
+  @override
+  String get settingsRssExport => 'JSON olarak dışa aktar';
+
+  @override
+  String get settingsRssImport => 'JSON\'dan içe aktar';
+
+  @override
+  String settingsRssExportDone(String path) {
+    return '$path konumuna aktarıldı';
+  }
+
+  @override
+  String get settingsRssImportDone => 'RSS verileri içe aktarıldı';
+
+  @override
+  String settingsRssExportFailed(String error) {
+    return 'RSS verileri dışa aktarılamadı: $error';
+  }
+
+  @override
+  String settingsRssImportFailed(String error) {
+    return 'RSS verileri içe aktarılamadı: $error';
+  }
+
+  @override
+  String get settingsRssImportInvalid => 'Dosya geçerli bir RSS yedeği değil';
+
+  @override
+  String get settingsRssImportDialogTitle => 'RSS verilerini içe aktar';
+
+  @override
+  String get settingsRssImportDialogBody =>
+      'Geri yüklenecekleri seçin. Seçilenler mevcut verilerin yerini alır.';
+
+  @override
+  String settingsRssImportFeeds(int count) {
+    return 'Beslemeler ($count)';
+  }
+
+  @override
+  String settingsRssImportTags(int count) {
+    return 'Etiketler ($count)';
+  }
+
+  @override
+  String settingsRssImportFavorites(int count) {
+    return 'Favoriler ($count)';
+  }
+
+  @override
+  String get settingsRssImportConfirm => 'İçe aktar';
+
+  @override
   String get upNextTitle => 'Sıradaki bölüm';
 
   @override

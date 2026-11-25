@@ -1646,6 +1646,96 @@ abstract class AppLocalizations {
   /// **'Remove from favorites'**
   String get rssRemoveFavorite;
 
+  /// No description provided for @settingsRssTransferTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS import / export'**
+  String get settingsRssTransferTitle;
+
+  /// No description provided for @settingsRssTransferHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up feeds, search tags and favorites to JSON, or restore them from a file.'**
+  String get settingsRssTransferHint;
+
+  /// No description provided for @settingsRssExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export to JSON'**
+  String get settingsRssExport;
+
+  /// No description provided for @settingsRssImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from JSON'**
+  String get settingsRssImport;
+
+  /// No description provided for @settingsRssExportDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to {path}'**
+  String settingsRssExportDone(String path);
+
+  /// No description provided for @settingsRssImportDone.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS data imported'**
+  String get settingsRssImportDone;
+
+  /// No description provided for @settingsRssExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not export RSS data: {error}'**
+  String settingsRssExportFailed(String error);
+
+  /// No description provided for @settingsRssImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not import RSS data: {error}'**
+  String settingsRssImportFailed(String error);
+
+  /// No description provided for @settingsRssImportInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is not a valid RSS backup JSON'**
+  String get settingsRssImportInvalid;
+
+  /// No description provided for @settingsRssImportDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import RSS data'**
+  String get settingsRssImportDialogTitle;
+
+  /// No description provided for @settingsRssImportDialogBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose what to restore. Selected items replace your current data.'**
+  String get settingsRssImportDialogBody;
+
+  /// No description provided for @settingsRssImportFeeds.
+  ///
+  /// In en, this message translates to:
+  /// **'Feeds ({count})'**
+  String settingsRssImportFeeds(int count);
+
+  /// No description provided for @settingsRssImportTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags ({count})'**
+  String settingsRssImportTags(int count);
+
+  /// No description provided for @settingsRssImportFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites ({count})'**
+  String settingsRssImportFavorites(int count);
+
+  /// No description provided for @settingsRssImportConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get settingsRssImportConfirm;
+
   /// No description provided for @upNextTitle.
   ///
   /// In en, this message translates to:
