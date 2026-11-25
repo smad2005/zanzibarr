@@ -28,5 +28,15 @@ rsync -a --delete \
   --exclude=kimi-export-\* \
   "$ROOT/" "$WORK/"
 
-dart "$ROOT/tools/configure_tv_pubspec.dart" "$WORK" "$PLATFORM"
+if command -v dart >/dev/null 2>&1; then
+  DART=dart
+elif [[ -n "${FLUTTER_TIZEN_HOME:-}" && -x "$FLUTTER_TIZEN_HOME/bin/cache/dart-sdk/bin/dart" ]]; then
+  DART="$FLUTTER_TIZEN_HOME/bin/cache/dart-sdk/bin/dart"
+elif [[ -n "${FLUTTER_WEBOS_HOME:-}" && -x "$FLUTTER_WEBOS_HOME/bin/cache/dart-sdk/bin/dart" ]]; then
+  DART="$FLUTTER_WEBOS_HOME/bin/cache/dart-sdk/bin/dart"
+else
+  echo "error: dart executable not found" >&2
+  exit 1
+fi
+"$DART" "$ROOT/tools/configure_tv_pubspec.dart" "$WORK" "$PLATFORM"
 printf '%s\n' "$WORK"
