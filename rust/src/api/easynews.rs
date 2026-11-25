@@ -87,13 +87,14 @@ pub(crate) async fn run_search(
     let page_no = offset / per_page + 1;
     let url = easynews::build_search_url(&config.base_url, query, per_page, page_no);
     let authorization = easynews::authorization_basic(&config.username, &config.password);
-    let response = http::http_request(
+    let response = http::http_request_with_origin(
         "GET",
         &url,
         &[("Authorization", authorization.as_str())],
         &[],
         MAX_SEARCH_BYTES,
         SEARCH_TIMEOUT,
+        &config.base_url,
     )
     .await
     .map_err(map_http_error)?;
@@ -137,7 +138,7 @@ pub fn easynews_download_nzb(
         let form = easynews::build_download_form(&request);
         let authorization = easynews::authorization_basic(&config.username, &config.password);
         let url = easynews::nzb_post_url(&config.base_url);
-        let response = http::http_request(
+        let response = http::http_request_with_origin(
             "POST",
             &url,
             &[
@@ -147,6 +148,7 @@ pub fn easynews_download_nzb(
             form.as_bytes(),
             MAX_NZB_BYTES,
             DOWNLOAD_TIMEOUT,
+            &config.base_url,
         )
         .await
         .map_err(map_http_error)?;

@@ -173,13 +173,14 @@ pub async fn search_subtitles(
         build_query(&params)
     );
 
-    let response = http::http_request(
+    let response = http::http_request_with_origin(
         "GET",
         &url,
         &[("Api-Key", config.api_key), ("User-Agent", APP_USER_AGENT)],
         &[],
         MAX_SEARCH_RESPONSE_BYTES,
         SEARCH_TIMEOUT,
+        config.base_url,
     )
     .await?;
     check_status(response.status)?;
@@ -217,7 +218,7 @@ async fn login_token(
         "password": config.password,
     })
     .to_string();
-    let response = http::http_request(
+    let response = http::http_request_with_origin(
         "POST",
         &url,
         &[
@@ -228,6 +229,7 @@ async fn login_token(
         body.as_bytes(),
         64 * 1024,
         LOGIN_TIMEOUT,
+        config.base_url,
     )
     .await?;
     check_status(response.status).map_err(|error| match error {
@@ -270,13 +272,14 @@ pub async fn request_download(
         bearer = format!("Bearer {token}");
         headers.push(("Authorization", bearer.as_str()));
     }
-    let response = http::http_request(
+    let response = http::http_request_with_origin(
         "POST",
         &url,
         &headers,
         body.as_bytes(),
         64 * 1024,
         DOWNLOAD_LINK_TIMEOUT,
+        config.base_url,
     )
     .await?;
     check_status(response.status)?;
@@ -291,13 +294,14 @@ pub async fn request_download(
 
 /// `/download`'ın döndürdüğü imzalı bağlantıdan altyazı baytlarını çeker.
 pub async fn fetch_subtitle(link: &str) -> Result<Vec<u8>, OpenSubtitlesError> {
-    let response = http::http_request(
+    let response = http::http_request_with_origin(
         "GET",
         link,
         &[("User-Agent", APP_USER_AGENT)],
         &[],
         MAX_SUBTITLE_BYTES,
         SUBTITLE_FETCH_TIMEOUT,
+        link,
     )
     .await?;
     check_status(response.status)?;

@@ -11,12 +11,13 @@
 //! statik bağlam ve durum kodu taşır.
 
 use std::io;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
+use tokio::net::{lookup_host, TcpStream};
 use tokio_rustls::rustls;
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::TlsConnector;
@@ -68,6 +69,7 @@ struct ParsedUrl<'a> {
 }
 
 fn parse_url(url: &str) -> Result<ParsedUrl<'_>, HttpError> {
+    validate_url_text(url)?;
     let (https, rest) = if let Some(rest) = url.strip_prefix("https://") {
         (true, rest)
     } else if let Some(rest) = url.strip_prefix("http://") {
@@ -101,6 +103,62 @@ fn parse_url(url: &str) -> Result<ParsedUrl<'_>, HttpError> {
     })
 }
 
+fn validate_url_text(input: &str) -> Result<(), HttpError> {
+    if input.bytes().any(|b| b <= 0x20 || b == 0x7f || b == b'\\') {
+        return Err(HttpError::InvalidUrl("unsafe URL text"));
+    }
+    Ok(())
+}
+
+fn private_address(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => ip.is_private() || ip.is_loopback(),
+        IpAddr::V6(ip) => ip
+            .to_ipv4_mapped()
+            .map(|mapped| private_address(mapped.into()))
+            .unwrap_or(ip.is_loopback() || (ip.segments()[0] & 0xfe00) == 0xfc00),
+    }
+}
+
+fn forbidden_address(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let octets = ip.octets();
+            ip.is_unspecified()
+                || ip.is_multicast()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || octets[0] == 0
+                || octets[0] >= 240
+                || (octets[0] == 100 && (64..=127).contains(&octets[1]))
+                || (octets[0] == 198 && (18..=19).contains(&octets[1]))
+        }
+        IpAddr::V6(ip) => ip
+            .to_ipv4_mapped()
+            .map(|mapped| forbidden_address(mapped.into()))
+            .unwrap_or(
+                ip.is_unspecified()
+                    || ip.is_multicast()
+                    || (ip.segments()[0] & 0xffc0) == 0xfe80,
+            ),
+    }
+}
+
+fn address_allowed(ip: IpAddr, same_origin: bool) -> bool {
+    !forbidden_address(ip) && (!private_address(ip) || same_origin)
+}
+
+pub fn same_origin(left: &str, right: &str) -> bool {
+    match (parse_url(left), parse_url(right)) {
+        (Ok(left), Ok(right)) => {
+            left.https == right.https
+                && left.port == right.port
+                && left.host.eq_ignore_ascii_case(right.host)
+        }
+        _ => false,
+    }
+}
+
 /// 3xx `Location` değerini tam URL'ye çözer. Mutlak URL'ler olduğu gibi
 /// döner; kök-göreli ve yol-göreli biçimler yönlendiren URL'ye göre kurulur.
 fn resolve_redirect(base: &ParsedUrl, location: &str) -> Result<String, HttpError> {
@@ -108,7 +166,12 @@ fn resolve_redirect(base: &ParsedUrl, location: &str) -> Result<String, HttpErro
     if location.is_empty() {
         return Err(HttpError::Malformed("empty Location header"));
     }
+    validate_url_text(location)?;
     if location.starts_with("http://") || location.starts_with("https://") {
+        let parsed = parse_url(location)?;
+        if base.https && !parsed.https {
+            return Err(HttpError::InvalidUrl("HTTPS downgrade is not allowed"));
+        }
         return Ok(location.to_string());
     }
     let scheme = if base.https { "https" } else { "http" };
@@ -152,6 +215,24 @@ pub async fn http_get(
     http_request("GET", url, &[], &[], max_bytes, timeout).await
 }
 
+pub async fn http_get_with_origin(
+    url: &str,
+    max_bytes: usize,
+    timeout: Duration,
+    configured_origin: &str,
+) -> Result<HttpResponse, HttpError> {
+    http_request_with_origin(
+        "GET",
+        url,
+        &[],
+        &[],
+        max_bytes,
+        timeout,
+        configured_origin,
+    )
+    .await
+}
+
 /// İstek yöntemi + ek başlıklar + gövde tanımlayan genel HTTP isteği.
 ///
 /// Yönlendirme kuralları (RFC 7231 izleyicisi davranış):
@@ -168,8 +249,30 @@ pub async fn http_request(
     max_bytes: usize,
     timeout: Duration,
 ) -> Result<HttpResponse, HttpError> {
-    match tokio::time::timeout(timeout, http_request_inner(method, url, extra_headers, body, max_bytes))
-        .await
+    http_request_with_origin(method, url, extra_headers, body, max_bytes, timeout, url).await
+}
+
+pub async fn http_request_with_origin(
+    method: &str,
+    url: &str,
+    extra_headers: &[(&str, &str)],
+    body: &[u8],
+    max_bytes: usize,
+    timeout: Duration,
+    configured_origin: &str,
+) -> Result<HttpResponse, HttpError> {
+    match tokio::time::timeout(
+        timeout,
+        http_request_inner(
+            method,
+            url,
+            extra_headers,
+            body,
+            max_bytes,
+            configured_origin,
+        ),
+    )
+    .await
     {
         Ok(result) => result,
         Err(_) => Err(HttpError::Timeout),
@@ -182,12 +285,28 @@ async fn http_request_inner(
     extra_headers: &[(&str, &str)],
     body: &[u8],
     max_bytes: usize,
+    configured_origin: &str,
 ) -> Result<HttpResponse, HttpError> {
+    let configured = parse_url(configured_origin)?;
     let mut current = url.to_string();
     let mut method = method.to_string();
     let mut body = body.to_vec();
     for _ in 0..=MAX_REDIRECTS {
         let parsed = parse_url(&current)?;
+        if configured.https && !parsed.https {
+            return Err(HttpError::InvalidUrl("HTTPS downgrade is not allowed"));
+        }
+        let same = parsed.https == configured.https
+            && parsed.port == configured.port
+            && parsed.host.eq_ignore_ascii_case(configured.host);
+        let addresses: Vec<SocketAddr> = lookup_host((parsed.host, parsed.port)).await?.collect();
+        if addresses.is_empty()
+            || addresses
+                .iter()
+                .any(|address| !address_allowed(address.ip(), same))
+        {
+            return Err(HttpError::InvalidUrl("destination is not permitted"));
+        }
         let default_port = if parsed.https { 443 } else { 80 };
         let host_header = if parsed.port == default_port {
             parsed.host.to_string()
@@ -195,7 +314,7 @@ async fn http_request_inner(
             format!("{}:{}", parsed.host, parsed.port)
         };
 
-        let tcp = TcpStream::connect((parsed.host, parsed.port)).await?;
+        let tcp = TcpStream::connect(addresses.as_slice()).await?;
         tcp.set_nodelay(true).ok();
         let response = if parsed.https {
             let server_name = ServerName::try_from(parsed.host.to_string())
@@ -507,11 +626,11 @@ mod tests {
 
     #[test]
     fn url_ayristirma_temel_durumlar() {
-        let parsed = parse_url("https://indexer.example/api?t=search&q=a b").unwrap();
+        let parsed = parse_url("https://indexer.example/api?t=search&q=a%20b").unwrap();
         assert!(parsed.https);
         assert_eq!(parsed.host, "indexer.example");
         assert_eq!(parsed.port, 443);
-        assert_eq!(parsed.target, "/api?t=search&q=a b");
+        assert_eq!(parsed.target, "/api?t=search&q=a%20b");
 
         let parsed = parse_url("http://indexer.example:8080/api").unwrap();
         assert!(!parsed.https);
@@ -796,5 +915,83 @@ mod tests {
         let result = http_get(&url, 1024, Duration::from_secs(10)).await;
         assert!(matches!(result, Err(HttpError::TooManyRedirects)));
         server.abort();
+    }
+
+    #[test]
+    fn https_downgrade_redirect_rejected() {
+        let base = parse_url("https://idx.example/api").unwrap();
+        assert!(matches!(
+            resolve_redirect(&base, "http://idx.example/api"),
+            Err(HttpError::InvalidUrl("HTTPS downgrade is not allowed"))
+        ));
+        assert!(resolve_redirect(&base, "https://idx.example/next").is_ok());
+    }
+
+    #[test]
+    fn same_origin_normalizes_default_port_and_host_case() {
+        assert!(same_origin(
+            "https://IDX.example/api",
+            "https://idx.example:443/other"
+        ));
+        assert!(!same_origin(
+            "https://idx.example/api",
+            "http://idx.example/api"
+        ));
+        assert!(!same_origin(
+            "https://idx.example/api",
+            "https://other.example/api"
+        ));
+    }
+
+    #[tokio::test]
+    async fn cross_origin_loopback_never_connects() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let url = format!("http://127.0.0.1:{port}/secret");
+        let result = http_get_with_origin(
+            &url,
+            1024,
+            Duration::from_secs(2),
+            "http://idx.example/api",
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(HttpError::InvalidUrl("destination is not permitted"))
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(25), listener.accept())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn cross_origin_redirect_is_rejected_before_connect() {
+        let first = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let first_port = first.local_addr().unwrap().port();
+        let second = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let second_port = second.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut conn, _) = first.accept().await.unwrap();
+            let mut buf = [0u8; 512];
+            let _ = conn.read(&mut buf).await.unwrap();
+            let response = format!(
+                "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{second_port}/secret\r\nContent-Length: 0\r\n\r\n"
+            );
+            conn.write_all(response.as_bytes()).await.unwrap();
+        });
+        let url = format!("http://127.0.0.1:{first_port}/start");
+        let result = http_get_with_origin(&url, 1024, Duration::from_secs(2), &url).await;
+        assert!(matches!(
+            result,
+            Err(HttpError::InvalidUrl("destination is not permitted"))
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(25), second.accept())
+                .await
+                .is_err()
+        );
+        server.await.unwrap();
     }
 }

@@ -76,8 +76,9 @@ async fn fetch_checked_async(
     url: &str,
     max_bytes: usize,
     timeout: Duration,
+    configured_origin: &str,
 ) -> Result<String, String> {
-    let response = http::http_get(url, max_bytes, timeout)
+    let response = http::http_get_with_origin(url, max_bytes, timeout, configured_origin)
         .await
         .map_err(map_http_error)?;
     if !(200..300).contains(&response.status) {
@@ -86,8 +87,13 @@ async fn fetch_checked_async(
     String::from_utf8(response.body).map_err(|_| "indexer response is not UTF-8".to_string())
 }
 
-fn fetch_checked(url: &str, max_bytes: usize, timeout: Duration) -> Result<String, String> {
-    RUNTIME.block_on(fetch_checked_async(url, max_bytes, timeout))
+fn fetch_checked(
+    url: &str,
+    max_bytes: usize,
+    timeout: Duration,
+    configured_origin: &str,
+) -> Result<String, String> {
+    RUNTIME.block_on(fetch_checked_async(url, max_bytes, timeout, configured_origin))
 }
 
 /// Bir kaynağın arama çıktısı (birleştirme için), motor öğeleriyle.
@@ -117,7 +123,8 @@ pub(crate) async fn run_indexer_search(
             ("offset", &offset),
         ],
     );
-    let body = fetch_checked_async(&url, MAX_SEARCH_BYTES, SEARCH_TIMEOUT).await?;
+    let body =
+        fetch_checked_async(&url, MAX_SEARCH_BYTES, SEARCH_TIMEOUT, &config.base_url).await?;
     let mut page = newznab::parse_search_response(&body).map_err(|error| error.to_string())?;
     // Sonuçlar bu hesabın (profil) kimliğiyle etiketlenir: çoklu indexer
     // desteğinde Dart indirme yolunu bu kimlikle seçer.
@@ -166,7 +173,7 @@ pub fn newznab_check_caps(config: IndexerConfigDto) -> Result<IndexerCapsDto, St
         &config.base_url,
         &[("t", "caps"), ("apikey", &config.api_key)],
     );
-    let body = fetch_checked(&url, MAX_SEARCH_BYTES, SEARCH_TIMEOUT)?;
+    let body = fetch_checked(&url, MAX_SEARCH_BYTES, SEARCH_TIMEOUT, &config.base_url)?;
     let caps = newznab::parse_caps(&body).map_err(|error| error.to_string())?;
     Ok(IndexerCapsDto {
         server_title: caps.server_title,
@@ -353,7 +360,7 @@ pub fn newznab_download_nzb(
         )
     };
 
-    let body = fetch_checked(&url, MAX_NZB_BYTES, DOWNLOAD_TIMEOUT)?;
+    let body = fetch_checked(&url, MAX_NZB_BYTES, DOWNLOAD_TIMEOUT, &config.base_url)?;
     let looks_nzb = body
         .get(..4096)
         .is_some_and(|head| head.contains("<nzb") || head.contains("<!DOCTYPE nzb"));
