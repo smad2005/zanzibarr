@@ -16,10 +16,12 @@
 use std::io;
 use std::ops::Range;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinSet;
+use tokio::time::timeout;
 
 /// Bir byte aralığını çözüp yazan kaynak. Somut hali NZB+NNTP'dir
 /// ([`super::nntp_source::NntpByteSource`]); testlerde bellek içi tampon.
@@ -117,14 +119,28 @@ struct RequestHead {
     range: Option<String>,
 }
 
+const HEADER_TIMEOUT: Duration = Duration::from_secs(10);
+
 async fn handle_connection<S: RangeSource>(
-    mut stream: TcpStream,
+    stream: TcpStream,
     source: Arc<S>,
     required_prefix: Option<Arc<str>>,
 ) -> io::Result<()> {
-    let head_bytes = match read_head(&mut stream).await? {
+    handle_connection_with_header_timeout(stream, source, required_prefix, HEADER_TIMEOUT).await
+}
+
+async fn handle_connection_with_header_timeout<S: RangeSource>(
+    mut stream: TcpStream,
+    source: Arc<S>,
+    required_prefix: Option<Arc<str>>,
+    header_timeout: Duration,
+) -> io::Result<()> {
+    let head_bytes = match timeout(header_timeout, read_head(&mut stream))
+        .await
+        .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "HTTP header timeout"))??
+    {
         Some(bytes) => bytes,
-        None => return Ok(()), // boş/erken kapanan bağlantı
+        None => return Ok(()),
     };
     let head = match parse_request_head(&head_bytes) {
         Some(head) => head,
@@ -770,5 +786,34 @@ mod tests {
         assert!(head.starts_with("HTTP/1.1 206 Partial Content"), "{head}");
         assert!(head.contains("Content-Range: bytes 100-199/10000"));
         assert_eq!(body, data[100..200]);
+    }
+
+    #[tokio::test]
+    async fn idle_unauthenticated_headers_expire() {
+        let listener = bind_local(0).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let source = Arc::new(InMemorySource {
+            data: vec![1],
+            content_type: "video/mp4".into(),
+        });
+        let error = handle_connection_with_header_timeout(
+            stream,
+            source,
+            Some("/secret/".into()),
+            Duration::from_millis(30),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        let mut byte = [0];
+        assert_eq!(
+            timeout(Duration::from_secs(2), client.read(&mut byte))
+                .await
+                .unwrap()
+                .unwrap(),
+            0
+        );
     }
 }
