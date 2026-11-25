@@ -8,6 +8,29 @@ pub fn engine_info() -> String {
     format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
 }
 
+#[flutter_rust_bridge::frb(sync)]
+pub fn configure_doh(endpoint: String) {
+    crate::engine::doh::configure(endpoint);
+}
+
+pub async fn doh_check(endpoint: String) -> bool {
+    crate::engine::doh::resolve("cloudflare.com", &endpoint)
+        .await
+        .is_ok()
+}
+
+pub async fn fetch_text(url: String) -> Result<String, String> {
+    use std::time::Duration;
+
+    let response = crate::engine::http::http_get(&url, 4 * 1024 * 1024, Duration::from_secs(20))
+        .await
+        .map_err(|error| error.to_string())?;
+    if !(200..300).contains(&response.status) {
+        return Err(format!("HTTP {}", response.status));
+    }
+    String::from_utf8(response.body).map_err(|_| "response is not UTF-8".to_string())
+}
+
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();

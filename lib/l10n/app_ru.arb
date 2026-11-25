@@ -324,5 +324,17 @@
   "settingsIndexerNew": "＋ New indexer…",
   "settingsIndexerJoinLabel": "Join searches",
   "settingsIndexerJoinHint": "Searches query every enabled indexer in parallel and merge the results.",
-  "settingsIndexerProxyHint": "Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key."
+  "settingsIndexerProxyHint": "Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key.",
+  "settingsDohTitle": "DNS поверх HTTPS",
+  "settingsDohHint": "Разрешать домены через HTTPS-DNS вместо системного DNS — помогает, если провайдер блокирует или подменяет DNS-ответы.",
+  "settingsDohEnable": "Использовать DNS-over-HTTPS",
+  "settingsDohProvider": "Резолвер",
+  "settingsDohCustomUrl": "Свой URL",
+  "settingsDohSave": "Сохранить",
+  "settingsDohSaved": "Настройки DNS-over-HTTPS сохранены",
+  "settingsDohFailed": "Не удалось сохранить настройки DNS-over-HTTPS",
+  "settingsDohConnected": "Подключено",
+  "settingsDohUnreachable": "Недоступно",
+  "settingsDohNotTested": "Не проверено",
+  "settingsDohCheck": "Проверить"
 }

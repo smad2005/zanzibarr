@@ -126,5 +126,20 @@ void main() {
       );
       expect(await service.checkForUpdate(), isNull);
     });
+
+    test('injected fetchText is used for update check', () async {
+      var calls = 0;
+      final service = UpdateService(
+        fetchText: (url) async {
+          calls++;
+          expect(url.toString(), UpdateService.releasesApiUrl);
+          return jsonEncode(_releaseJson(tag: 'v9.9.9'));
+        },
+        storage: _MemoryPreferenceStorage(),
+      );
+      final result = await service.checkForUpdate();
+      expect(calls, 1);
+      expect(result?.version, '9.9.9');
+    });
   });
 }

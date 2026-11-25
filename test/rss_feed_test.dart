@@ -126,6 +126,20 @@ void main() {
       expect(cache.fetch(feed), throwsA(isA<RssFetchException>()));
     });
 
+    test('injected fetchText is used for RSS transport', () async {
+      var calls = 0;
+      final cache = RssFeedCache(
+        fetchText: (url) async {
+          calls++;
+          expect(url.toString(), feed.url);
+          return _enclosureOnlyFeed;
+        },
+      );
+      final items = await cache.fetch(feed);
+      expect(calls, 1);
+      expect(items, isNotEmpty);
+    });
+
     test('notifies only on fresh network data, peek makes no request', () async {
       var requests = 0;
       var notifications = 0;

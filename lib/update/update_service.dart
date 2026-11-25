@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../player/media_preferences.dart';
+import '../src/rust/api/simple.dart' as rust_simple;
 
 /// GitHub Releases üzerinden yayımlanan bir sürümün bilgisi.
 class ReleaseInfo {
@@ -90,12 +91,20 @@ class ReleaseInfo {
 /// Android'de APK indirilip sistem paket yükleyicisiyle kurulur; diğer
 /// platformlarda release sayfası tarayıcıda açılır (iOS sideload zorunlu).
 class UpdateService {
-  UpdateService({http.Client? client, PlayerPreferenceStorage? storage})
-    : _client = client ?? http.Client(),
-      _storage = storage ?? FlutterSecurePlayerPreferenceStorage();
+  UpdateService({
+    http.Client? client,
+    PlayerPreferenceStorage? storage,
+    Future<String> Function(Uri url)? fetchText,
+  }) : _client = client ?? http.Client(),
+       _storage = storage ?? FlutterSecurePlayerPreferenceStorage(),
+       fetchText = fetchText ??
+           (client == null
+               ? (url) => rust_simple.fetchText(url: url.toString())
+               : null);
 
   final http.Client _client;
   final PlayerPreferenceStorage _storage;
+  final Future<String> Function(Uri url)? fetchText;
 
   static const releasesApiUrl =
       'https://api.github.com/repos/smad2005/zanzibarr/releases/latest';
@@ -108,14 +117,25 @@ class UpdateService {
     return ReleaseInfo.normalizeVersion(info.version);
   }
 
+  Future<String> _getBody(Uri url) async {
+    const requestTimeout = Duration(seconds: 15);
+    try {
+      final custom = fetchText;
+      if (custom != null) return await custom(url).timeout(requestTimeout);
+      final response = await _client.get(url).timeout(requestTimeout);
+      if (response.statusCode != 200) return '';
+      return response.body;
+    } catch (_) {
+      return '';
+    }
+  }
+
   /// Yeni sürüm varsa ve kullanıcı onu atlamadıysa bilgisini döndürür.
   Future<ReleaseInfo?> checkForUpdate() async {
     final current = await currentVersion();
-    final response = await _client
-        .get(Uri.parse(releasesApiUrl))
-        .timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) return null;
-    final latest = ReleaseInfo.fromJson(jsonDecode(response.body));
+    final body = await _getBody(Uri.parse(releasesApiUrl));
+    if (body.isEmpty) return null;
+    final latest = ReleaseInfo.fromJson(jsonDecode(body));
     if (latest == null) return null;
     if (ReleaseInfo.compareVersions(latest.version, current) <= 0) {
       return null;

@@ -1099,4 +1099,41 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get settingsIndexerProxyHint =>
       'Prowlarr / NZBHydra2: Newznab-uyumlu API adreslerini ekleyin (ör. http://prowlarr:9696/prowlarr/1/api ya da http://hydra:5075/api) ve uygulama API anahtarını girin.';
+
+  @override
+  String get settingsDohTitle => 'DNS-over-HTTPS';
+
+  @override
+  String get settingsDohHint =>
+      'Alan adlarını sistem DNS yerine HTTPS DNS çözümleyicisiyle çöz. Sağlayıcınız DNS yanıtlarını engelliyorsa veya değiştiriyorsa yardımcı olur.';
+
+  @override
+  String get settingsDohEnable => 'DNS-over-HTTPS kullan';
+
+  @override
+  String get settingsDohProvider => 'Çözümleyici';
+
+  @override
+  String get settingsDohCustomUrl => 'Özel URL';
+
+  @override
+  String get settingsDohSave => 'Kaydet';
+
+  @override
+  String get settingsDohSaved => 'DNS-over-HTTPS ayarları kaydedildi';
+
+  @override
+  String get settingsDohFailed => 'DNS-over-HTTPS ayarları kaydedilemedi';
+
+  @override
+  String get settingsDohConnected => 'Bağlı';
+
+  @override
+  String get settingsDohUnreachable => 'Erişilemiyor';
+
+  @override
+  String get settingsDohNotTested => 'Test edilmedi';
+
+  @override
+  String get settingsDohCheck => 'Kontrol et';
 }

@@ -17,6 +17,8 @@ use std::time::Duration;
 
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+
+use super::doh;
 use tokio::net::{lookup_host, TcpStream};
 use tokio_rustls::rustls;
 use tokio_rustls::rustls::pki_types::ServerName;
@@ -42,6 +44,8 @@ pub enum HttpError {
     TooManyRedirects,
     #[error("request timed out")]
     Timeout,
+    #[error("DoH lookup failed: {0}")]
+    Doh(&'static str),
 }
 
 pub struct HttpResponse {
@@ -261,6 +265,11 @@ pub async fn http_request_with_origin(
     timeout: Duration,
     configured_origin: &str,
 ) -> Result<HttpResponse, HttpError> {
+    let origin = if configured_origin.trim().is_empty() {
+        url
+    } else {
+        configured_origin
+    };
     match tokio::time::timeout(
         timeout,
         http_request_inner(
@@ -269,7 +278,8 @@ pub async fn http_request_with_origin(
             extra_headers,
             body,
             max_bytes,
-            configured_origin,
+            origin,
+            DnsMode::Configured,
         ),
     )
     .await
@@ -279,6 +289,52 @@ pub async fn http_request_with_origin(
     }
 }
 
+pub async fn http_request_system(
+    method: &str,
+    url: &str,
+    extra_headers: &[(&str, &str)],
+    body: &[u8],
+    max_bytes: usize,
+    timeout: Duration,
+) -> Result<HttpResponse, HttpError> {
+    match tokio::time::timeout(
+        timeout,
+        http_request_inner(
+            method,
+            url,
+            extra_headers,
+            body,
+            max_bytes,
+            url,
+            DnsMode::System,
+        ),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(HttpError::Timeout),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum DnsMode {
+    Configured,
+    System,
+}
+
+pub async fn resolve_addresses(host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+    if let Some(endpoint) = doh::endpoint() {
+        let addresses = Box::pin(doh::resolve(host, &endpoint))
+            .await
+            .map_err(|_| io::Error::other("DoH lookup failed"))?;
+        return Ok(addresses
+            .into_iter()
+            .map(|ip| SocketAddr::new(ip, port))
+            .collect());
+    }
+    Ok(lookup_host((host, port)).await?.collect())
+}
+
 async fn http_request_inner(
     method: &str,
     url: &str,
@@ -286,6 +342,7 @@ async fn http_request_inner(
     body: &[u8],
     max_bytes: usize,
     configured_origin: &str,
+    dns_mode: DnsMode,
 ) -> Result<HttpResponse, HttpError> {
     let configured = parse_url(configured_origin)?;
     let mut current = url.to_string();
@@ -299,7 +356,10 @@ async fn http_request_inner(
         let same = parsed.https == configured.https
             && parsed.port == configured.port
             && parsed.host.eq_ignore_ascii_case(configured.host);
-        let addresses: Vec<SocketAddr> = lookup_host((parsed.host, parsed.port)).await?.collect();
+        let addresses: Vec<SocketAddr> = match dns_mode {
+            DnsMode::System => lookup_host((parsed.host, parsed.port)).await?.collect(),
+            DnsMode::Configured => resolve_addresses(parsed.host, parsed.port).await?,
+        };
         if addresses.is_empty()
             || addresses
                 .iter()
@@ -841,6 +901,27 @@ mod tests {
 
         let url = format!("http://127.0.0.1:{port}/basla");
         let response = http_get(&url, 1024, Duration::from_secs(5)).await.unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, b"ok");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn empty_configured_origin_uses_request_url() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut conn, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 512];
+            let _ = conn.read(&mut buf).await.unwrap();
+            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                .await
+                .unwrap();
+        });
+        let url = format!("http://127.0.0.1:{port}/nzb");
+        let response = http_get_with_origin(&url, 1024, Duration::from_secs(5), "")
+            .await
+            .unwrap();
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"ok");
         server.await.unwrap();

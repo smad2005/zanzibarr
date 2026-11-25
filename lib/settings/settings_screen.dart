@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../rss/rss_import_export_card.dart';
+import '../settings/doh_settings_card.dart';
 import '../src/rust/api/search.dart';
 import '../tv_focus.dart';
 import 'indexer_settings.dart';
@@ -1548,6 +1549,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ],
                         ),
                       ),
+                      const DohSettingsCard(),
                       _buildOpenSubtitlesSection(context),
                       const RssImportExportCard(),
                     ],

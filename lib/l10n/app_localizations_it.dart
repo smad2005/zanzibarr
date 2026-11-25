@@ -1107,4 +1107,41 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get settingsIndexerProxyHint =>
       'Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key.';
+
+  @override
+  String get settingsDohTitle => 'DNS over HTTPS';
+
+  @override
+  String get settingsDohHint =>
+      'Resolve hostnames through an HTTPS DNS resolver instead of system DNS.';
+
+  @override
+  String get settingsDohEnable => 'Use DNS over HTTPS';
+
+  @override
+  String get settingsDohProvider => 'Resolver';
+
+  @override
+  String get settingsDohCustomUrl => 'Custom resolver URL';
+
+  @override
+  String get settingsDohSave => 'Save';
+
+  @override
+  String get settingsDohSaved => 'DNS over HTTPS settings saved';
+
+  @override
+  String get settingsDohFailed => 'Could not save DNS over HTTPS settings';
+
+  @override
+  String get settingsDohConnected => 'Connected';
+
+  @override
+  String get settingsDohUnreachable => 'Unreachable';
+
+  @override
+  String get settingsDohNotTested => 'Not checked';
+
+  @override
+  String get settingsDohCheck => 'Check';
 }

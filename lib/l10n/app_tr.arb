@@ -357,5 +357,17 @@
   "settingsIndexerNew": "＋ Yeni indexer…",
   "settingsIndexerJoinLabel": "Aramalara katıl",
   "settingsIndexerJoinHint": "Aramalar açık durumdaki tüm indexer'ları paralel sorgular ve sonuçları birleştirir.",
-  "settingsIndexerProxyHint": "Prowlarr / NZBHydra2: Newznab-uyumlu API adreslerini ekleyin (ör. http://prowlarr:9696/prowlarr/1/api ya da http://hydra:5075/api) ve uygulama API anahtarını girin."
+  "settingsIndexerProxyHint": "Prowlarr / NZBHydra2: Newznab-uyumlu API adreslerini ekleyin (ör. http://prowlarr:9696/prowlarr/1/api ya da http://hydra:5075/api) ve uygulama API anahtarını girin.",
+  "settingsDohTitle": "DNS-over-HTTPS",
+  "settingsDohHint": "Alan adlarını sistem DNS yerine HTTPS DNS çözümleyicisiyle çöz. Sağlayıcınız DNS yanıtlarını engelliyorsa veya değiştiriyorsa yardımcı olur.",
+  "settingsDohEnable": "DNS-over-HTTPS kullan",
+  "settingsDohProvider": "Çözümleyici",
+  "settingsDohCustomUrl": "Özel URL",
+  "settingsDohSave": "Kaydet",
+  "settingsDohSaved": "DNS-over-HTTPS ayarları kaydedildi",
+  "settingsDohFailed": "DNS-over-HTTPS ayarları kaydedilemedi",
+  "settingsDohConnected": "Bağlı",
+  "settingsDohUnreachable": "Erişilemiyor",
+  "settingsDohNotTested": "Test edilmedi",
+  "settingsDohCheck": "Kontrol et"
 }

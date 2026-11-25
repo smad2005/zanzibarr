@@ -12,3 +12,12 @@ String greet({required String name}) =>
     RustLib.instance.api.crateApiSimpleGreet(name: name);
 
 String engineInfo() => RustLib.instance.api.crateApiSimpleEngineInfo();
+
+void configureDoh({required String endpoint}) =>
+    RustLib.instance.api.crateApiSimpleConfigureDoh(endpoint: endpoint);
+
+Future<bool> dohCheck({required String endpoint}) =>
+    RustLib.instance.api.crateApiSimpleDohCheck(endpoint: endpoint);
+
+Future<String> fetchText({required String url}) =>
+    RustLib.instance.api.crateApiSimpleFetchText(url: url);

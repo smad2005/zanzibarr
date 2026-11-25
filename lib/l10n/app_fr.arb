@@ -266,5 +266,17 @@
   "settingsIndexerNew": "＋ New indexer…",
   "settingsIndexerJoinLabel": "Join searches",
   "settingsIndexerJoinHint": "Searches query every enabled indexer in parallel and merge the results.",
-  "settingsIndexerProxyHint": "Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key."
+  "settingsIndexerProxyHint": "Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key.",
+  "settingsDohTitle": "DNS over HTTPS",
+  "settingsDohHint": "Resolve hostnames through an HTTPS DNS resolver instead of system DNS.",
+  "settingsDohEnable": "Use DNS over HTTPS",
+  "settingsDohProvider": "Resolver",
+  "settingsDohCustomUrl": "Custom resolver URL",
+  "settingsDohSave": "Save",
+  "settingsDohSaved": "DNS over HTTPS settings saved",
+  "settingsDohFailed": "Could not save DNS over HTTPS settings",
+  "settingsDohConnected": "Connected",
+  "settingsDohUnreachable": "Unreachable",
+  "settingsDohNotTested": "Not checked",
+  "settingsDohCheck": "Check"
 }

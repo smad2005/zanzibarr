@@ -13,6 +13,8 @@ import 'player/player_format.dart';
 import 'player/playback_history.dart';
 import 'player/player_launcher.dart';
 import 'rss/rss_screen.dart';
+import 'settings/doh_settings.dart';
+import 'src/rust/api/simple.dart' show configureDoh;
 import 'update/update_service.dart';
 import 'search/search_screen.dart';
 import 'settings/indexer_settings.dart';
@@ -28,6 +30,10 @@ Future<void> _initializeNativeEngine(
     debugPrint('uiPreferences y├╝klenemedi, varsay─▒lanlarla devam: $error');
   });
   await Future.wait([initializeNativeRustEngine(), preferencesLoaded]);
+  final doh = await DohSettingsStore()
+      .load()
+      .catchError((Object error) => DohSettings.defaults);
+  configureDoh(endpoint: doh.endpoint);
 }
 
 /// ─░lk native ├зa─Яr─▒ hata verse veya tak─▒lsa bile bo┼Я pencere yerine anla┼Я─▒l─▒r

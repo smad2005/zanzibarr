@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
+import '../src/rust/api/simple.dart' as rust_simple;
+
 class RssFeed {
   const RssFeed({required this.id, required this.name, required this.url});
 
@@ -278,31 +280,42 @@ DateTime? parseRfc822Date(String value) {
 }
 
 class RssFeedCache extends ChangeNotifier {
-  RssFeedCache({http.Client? client, DateTime Function()? clock})
-    : _client = client ?? http.Client(),
-      _clock = clock ?? DateTime.now;
+  RssFeedCache({
+    http.Client? client,
+    DateTime Function()? clock,
+    this.fetchText,
+  }) : _client = client ?? http.Client(),
+       _clock = clock ?? DateTime.now;
 
-  static final shared = RssFeedCache();
+  static final shared = RssFeedCache(
+    fetchText: (url) => rust_simple.fetchText(url: url.toString()),
+  );
 
   static const ttl = Duration(minutes: 10);
   static const _timeout = Duration(seconds: 20);
 
   final http.Client _client;
   final DateTime Function() _clock;
+  final Future<String> Function(Uri url)? fetchText;
   final _entries = <String, ({DateTime fetchedAt, List<RssItem> items})>{};
+
+  Future<String> _load(Uri url) async {
+    final custom = fetchText;
+    if (custom != null) return custom(url);
+    final response = await _client.get(url).timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw RssFetchException('HTTP ${response.statusCode}');
+    }
+    return response.body;
+  }
 
   Future<List<RssItem>> fetch(RssFeed feed) async {
     final cached = _entries[feed.url];
     if (cached != null && _clock().difference(cached.fetchedAt) < ttl) {
       return _withFeedId(cached.items, feed.id);
     }
-    final response = await _client
-        .get(Uri.parse(feed.url))
-        .timeout(_timeout);
-    if (response.statusCode != 200) {
-      throw RssFetchException('HTTP ${response.statusCode}');
-    }
-    final items = parseRssItems(response.body, feedId: feed.id);
+    final body = await _load(Uri.parse(feed.url)).timeout(_timeout);
+    final items = parseRssItems(body, feedId: feed.id);
     _entries[feed.url] = (fetchedAt: _clock(), items: items);
     notifyListeners();
     return items;

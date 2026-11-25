@@ -13,6 +13,7 @@ use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::TlsConnector;
 
 use super::{is_connection_limit_response, NntpError, Response};
+use crate::engine::http::resolve_addresses;
 
 /// Tek durum satırı için üst sınır; saldırgan sunucuya karşı koruma.
 const MAX_LINE: usize = 64 * 1024;
@@ -229,7 +230,8 @@ pub async fn connect_tls(host: &str, port: u16) -> Result<TlsNntpConnection, Nnt
 
     let server_name = ServerName::try_from(host.to_string())
         .map_err(|_| NntpError::InvalidArgument(format!("invalid server name: {host}")))?;
-    let tcp = TcpStream::connect((host, port)).await?;
+    let addresses = resolve_addresses(host, port).await?;
+    let tcp = TcpStream::connect(addresses.as_slice()).await?;
     tcp.set_nodelay(true).ok();
     let tls = connector.connect(server_name, tcp).await?;
     NntpConnection::handshake(tls).await

@@ -2047,6 +2047,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key.'**
   String get settingsIndexerProxyHint;
+
+  /// No description provided for @settingsDohTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS over HTTPS'**
+  String get settingsDohTitle;
+
+  /// No description provided for @settingsDohHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolve hostnames through an HTTPS DNS resolver instead of system DNS.'**
+  String get settingsDohHint;
+
+  /// No description provided for @settingsDohEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Use DNS over HTTPS'**
+  String get settingsDohEnable;
+
+  /// No description provided for @settingsDohProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolver'**
+  String get settingsDohProvider;
+
+  /// No description provided for @settingsDohCustomUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom resolver URL'**
+  String get settingsDohCustomUrl;
+
+  /// No description provided for @settingsDohSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get settingsDohSave;
+
+  /// No description provided for @settingsDohSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS over HTTPS settings saved'**
+  String get settingsDohSaved;
+
+  /// No description provided for @settingsDohFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save DNS over HTTPS settings'**
+  String get settingsDohFailed;
+
+  /// No description provided for @settingsDohConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get settingsDohConnected;
+
+  /// No description provided for @settingsDohUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unreachable'**
+  String get settingsDohUnreachable;
+
+  /// No description provided for @settingsDohNotTested.
+  ///
+  /// In en, this message translates to:
+  /// **'Not checked'**
+  String get settingsDohNotTested;
+
+  /// No description provided for @settingsDohCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Check'**
+  String get settingsDohCheck;
 }
 
 class _AppLocalizationsDelegate

@@ -1104,4 +1104,42 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsIndexerProxyHint =>
       'Prowlarr / NZBHydra2: add their Newznab-compatible API URL (e.g. http://prowlarr:9696/prowlarr/1/api or http://hydra:5075/api) with the app API key.';
+
+  @override
+  String get settingsDohTitle => 'DNS поверх HTTPS';
+
+  @override
+  String get settingsDohHint =>
+      'Разрешать домены через HTTPS-DNS вместо системного DNS — помогает, если провайдер блокирует или подменяет DNS-ответы.';
+
+  @override
+  String get settingsDohEnable => 'Использовать DNS-over-HTTPS';
+
+  @override
+  String get settingsDohProvider => 'Резолвер';
+
+  @override
+  String get settingsDohCustomUrl => 'Свой URL';
+
+  @override
+  String get settingsDohSave => 'Сохранить';
+
+  @override
+  String get settingsDohSaved => 'Настройки DNS-over-HTTPS сохранены';
+
+  @override
+  String get settingsDohFailed =>
+      'Не удалось сохранить настройки DNS-over-HTTPS';
+
+  @override
+  String get settingsDohConnected => 'Подключено';
+
+  @override
+  String get settingsDohUnreachable => 'Недоступно';
+
+  @override
+  String get settingsDohNotTested => 'Не проверено';
+
+  @override
+  String get settingsDohCheck => 'Проверить';
 }
