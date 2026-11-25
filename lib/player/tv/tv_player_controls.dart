@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../chapter.dart';
 import '../player_format.dart';
 
 /// Lightweight, entirely Flutter-rendered TV chrome. It deliberately shares
@@ -32,6 +33,20 @@ class TvPlayerControls extends StatelessWidget {
     required this.onAudioTrack,
     required this.onToggleSubtitles,
     required this.onSearchSubtitles,
+    this.chapters = const [],
+    this.showChapters = false,
+    this.onChapterTap,
+    this.videoFill = false,
+    this.onToggleVideoFit,
+    this.onToggleCanvas,
+    this.onTogglePictureInPicture,
+    this.pictureInPictureSupported = false,
+    this.isPictureInPicture = false,
+    this.onToggleCast,
+    this.castAvailable = false,
+    this.casting = false,
+    this.onEpisodeSwitch,
+    this.hasMultipleEpisodes = false,
   });
 
   final bool visible;
@@ -57,6 +72,20 @@ class TvPlayerControls extends StatelessWidget {
   final ValueChanged<String> onAudioTrack;
   final VoidCallback onToggleSubtitles;
   final VoidCallback onSearchSubtitles;
+  final List<Chapter> chapters;
+  final bool showChapters;
+  final ValueChanged<Duration>? onChapterTap;
+  final bool videoFill;
+  final VoidCallback? onToggleVideoFit;
+  final VoidCallback? onToggleCanvas;
+  final VoidCallback? onTogglePictureInPicture;
+  final bool pictureInPictureSupported;
+  final bool isPictureInPicture;
+  final VoidCallback? onToggleCast;
+  final bool castAvailable;
+  final bool casting;
+  final VoidCallback? onEpisodeSwitch;
+  final bool hasMultipleEpisodes;
 
   static const _rates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
@@ -152,29 +181,63 @@ class TvPlayerControls extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 3,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 6,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (showChapters &&
+                              chapters.isNotEmpty &&
+                              duration.inMilliseconds > 0)
+                            LayoutBuilder(
+                              builder: (context, constraints) => SizedBox(
+                                height: 14,
+                                child: Stack(
+                                  children: [
+                                    for (final chapter in chapters)
+                                      Positioned(
+                                        left:
+                                            (chapter.start.inMilliseconds /
+                                                    duration.inMilliseconds)
+                                                .clamp(0.0, 1.0) *
+                                            (constraints.maxWidth - 4),
+                                        child: GestureDetector(
+                                          onTap: () =>
+                                              onChapterTap?.call(chapter.start),
+                                          child: Container(
+                                            width: 4,
+                                            height: 12,
+                                            color: Colors.white54,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6,
+                              ),
+                            ),
+                            child: Slider(
+                              value: duration.inMilliseconds <= 0
+                                  ? 0
+                                  : (position.inMilliseconds /
+                                            duration.inMilliseconds)
+                                      .clamp(0.0, 1.0),
+                              onChanged: ready && duration.inMilliseconds > 0
+                                  ? (value) => onSeek(
+                                      Duration(
+                                        milliseconds:
+                                            (value * duration.inMilliseconds)
+                                                .round(),
+                                      ),
+                                    )
+                                  : null,
+                            ),
                           ),
-                        ),
-                        child: Slider(
-                          value: duration.inMilliseconds <= 0
-                              ? 0
-                              : (position.inMilliseconds /
-                                        duration.inMilliseconds)
-                                    .clamp(0.0, 1.0),
-                          onChanged: ready && duration.inMilliseconds > 0
-                              ? (value) => onSeek(
-                                  Duration(
-                                    milliseconds:
-                                        (value * duration.inMilliseconds)
-                                            .round(),
-                                  ),
-                                )
-                              : null,
-                        ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -238,6 +301,50 @@ class TvPlayerControls extends StatelessWidget {
                         ),
                       ),
                     ),
+                    IconButton(
+                      tooltip: videoFill
+                          ? l10n.videoFitContain
+                          : l10n.videoFitCover,
+                      onPressed: onToggleVideoFit,
+                      icon: Icon(
+                        videoFill
+                            ? Icons.fit_screen_rounded
+                            : Icons.fit_screen_outlined,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: l10n.smartCanvasAreaLabel,
+                      onPressed: onToggleCanvas,
+                      icon: const Icon(Icons.crop_rounded),
+                    ),
+                    if (pictureInPictureSupported)
+                      IconButton(
+                        tooltip: isPictureInPicture
+                            ? 'Exit Picture-in-Picture'
+                            : 'Picture-in-Picture',
+                        onPressed: onTogglePictureInPicture,
+                        icon: Icon(
+                          isPictureInPicture
+                              ? Icons.picture_in_picture_alt_rounded
+                              : Icons.picture_in_picture_outlined,
+                        ),
+                      ),
+                    if (hasMultipleEpisodes)
+                      IconButton(
+                        tooltip: l10n.episodeSwitch,
+                        onPressed: onEpisodeSwitch,
+                        icon: const Icon(Icons.playlist_play_rounded),
+                      ),
+                    if (castAvailable)
+                      IconButton(
+                        tooltip: casting
+                            ? l10n.castDisconnect
+                            : l10n.castTooltip,
+                        onPressed: onToggleCast,
+                        icon: Icon(
+                          casting ? Icons.cast_connected_rounded : Icons.cast_rounded,
+                        ),
+                      ),
                     const Spacer(),
                     if (audioTracks.isNotEmpty)
                       PopupMenuButton<String>(

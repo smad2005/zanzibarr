@@ -17,6 +17,7 @@ void main() {
       nzbPath: nzbPath,
       initialEntryKey: initialEntryKey,
       platform: platform,
+      loadChapters: true,
     ),
     fileSelection: false,
   );

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../cast/cast_device_picker.dart';
+import '../../cast/cast_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../settings/opensubtitles_settings.dart';
 import '../../settings/provider_settings.dart';
@@ -15,13 +17,18 @@ import '../../src/rust/api/subtitles.dart'
         SubtitleDto,
         downloadOpensubtitles,
         searchOpensubtitles;
+import '../chapter.dart';
 import '../entry_picker.dart';
 import '../media_preferences.dart';
+import '../picture_in_picture_window.dart';
+import '../smart_canvas.dart';
+import '../smart_canvas_overlay.dart';
 import '../playback_history.dart';
 import '../playback_startup_guard.dart';
 import '../player_keyboard_controls.dart';
 import '../subtitle_search_dialog.dart';
 import '../up_next_overlay.dart';
+import 'chapters_source.dart';
 import 'tv_audio_tracks.dart';
 import 'tv_platform.dart';
 import 'tv_player_controls.dart';
@@ -46,6 +53,10 @@ class TvPlayerScreen extends StatefulWidget {
     this.osSearchFn,
     this.osDownloadFn,
     this.streamBackend,
+    this.castService,
+    this.pictureInPictureWindow,
+    this.chapters = const [],
+    this.loadChapters = false,
     this.startupTimeout = const Duration(seconds: 45),
   });
 
@@ -60,6 +71,10 @@ class TvPlayerScreen extends StatefulWidget {
   final OpenSubtitlesSearchFn? osSearchFn;
   final OpenSubtitlesDownloadFn? osDownloadFn;
   final TvStreamBackend? streamBackend;
+  final CastController? castService;
+  final PictureInPictureWindow? pictureInPictureWindow;
+  final List<Chapter> chapters;
+  final bool loadChapters;
   final Duration startupTimeout;
 
   @override
@@ -93,8 +108,20 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
   ProviderSettings _providerSettings = const ProviderSettings();
   MediaPreferences _preferences = MediaPreferences.defaults();
   List<PlayableEntryDto> _queue = const [];
+  List<PlayableEntryDto> _entries = const [];
   PlayableEntryDto? _upNext;
   List<VideoAudioTrack> _audioTracks = const [];
+  List<Chapter> _chapters = const [];
+  late final CastController _castService;
+  CastSession? _castSession;
+  bool _castBusy = false;
+  String? _castDeviceName;
+  StreamSubscription<Duration>? _castPositionSubscription;
+  late final PictureInPictureWindow _pictureInPictureWindow;
+  bool _isPictureInPicture = false;
+  bool _videoFill = false;
+  bool _canvasEditing = false;
+  CanvasCrop _canvasCrop = const CanvasCrop.full();
 
   Object? _error;
   String _status = '';
@@ -117,6 +144,9 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
   @override
   void initState() {
     super.initState();
+    _castService = widget.castService ?? AppCastService();
+    _pictureInPictureWindow =
+        widget.pictureInPictureWindow ?? NativePictureInPictureWindow();
     unawaited(_start());
   }
 
@@ -159,7 +189,10 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
         }
       }
       if (!mounted) return;
-      setState(() => _queue = queueAfterEntry(entries, entryKey));
+      setState(() {
+        _entries = entries;
+        _queue = queueAfterEntry(entries, entryKey);
+      });
       await _openEntry(entryKey);
     } catch (error) {
       await _fail(error);
@@ -169,13 +202,26 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
   Future<void> _loadPreferences() async {
     try {
       _preferences = await _preferenceStore.load(widget.nzbPath);
+      _canvasCrop = CanvasCrop(
+        left: _preferences.crop.left,
+        top: _preferences.crop.top,
+        right: _preferences.crop.right,
+        bottom: _preferences.crop.bottom,
+      );
       _subtitleDelay = Duration(
         milliseconds: (_preferences.subtitleDelaySeconds * 1000).round(),
       );
     } catch (_) {
       _preferences = MediaPreferences.defaults();
+      _canvasCrop = const CanvasCrop.full();
       _subtitleDelay = Duration.zero;
     }
+  }
+
+  Future<void> _loadChapters(String url) async {
+    final found = await loadStreamChapters(url);
+    if (!mounted || _disposing || found.isEmpty) return;
+    setState(() => _chapters = found);
   }
 
   Future<void> _openEntry(String? entryKey) async {
@@ -211,6 +257,12 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
       return;
     }
     _info = info;
+    setState(() {
+      _chapters = widget.chapters;
+    });
+    if (widget.loadChapters && widget.chapters.isEmpty) {
+      unawaited(_loadChapters(info.url));
+    }
     final controller = VideoPlayerController.networkUrl(
       Uri.parse(info.url),
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
@@ -345,6 +397,116 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
         _upNext = null;
       });
     }
+  }
+
+  void _toggleVideoFit() {
+    if (mounted) setState(() => _videoFill = !_videoFill);
+  }
+
+  Future<void> _togglePictureInPicture() async {
+    final controller = _controller;
+    if (controller == null || !_pictureInPictureWindow.isSupported) return;
+    final enter = !_isPictureInPicture;
+    final size = controller.value.size;
+    final changed = enter
+        ? await _pictureInPictureWindow.enter(
+            width: size.width <= 0 ? null : size.width.toInt(),
+            height: size.height <= 0 ? null : size.height.toInt(),
+          )
+        : await _pictureInPictureWindow.exit();
+    if (!mounted || !changed) return;
+    setState(() => _isPictureInPicture = enter);
+  }
+
+  void _toggleCanvasEditor() {
+    if (!mounted) return;
+    setState(() => _canvasEditing = !_canvasEditing);
+  }
+
+  void _commitCanvasCrop(CanvasCrop crop) {
+    _canvasCrop = clampCanvasCrop(crop, minimumExtent: 0.000001);
+    if (!mounted) return;
+    setState(() => _canvasEditing = false);
+    final rect = NormalizedCropRect(
+      left: _canvasCrop.left,
+      top: _canvasCrop.top,
+      right: _canvasCrop.right,
+      bottom: _canvasCrop.bottom,
+    );
+    unawaited(_preferenceStore.save(widget.nzbPath, _preferences.copyWith(crop: rect)));
+  }
+
+  Future<void> _switchEpisode() async {
+    if (_entries.length < 2 || !mounted) return;
+    final key = await showPlayableEntryPicker(context, _entries);
+    if (key == null || !mounted || key == _resolvedEntryKey) return;
+    await _saveHistory();
+    await _openEntry(key);
+  }
+
+  Future<void> _toggleCast() async {
+    if (_castSession != null) {
+      await _endCastSession();
+      return;
+    }
+    final url = _info?.castUrl ?? '';
+    if (url.isEmpty || !mounted) {
+      _showCastMessage(AppLocalizations.of(context).castUnavailable);
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    final device = await CastDevicePicker.show(context, service: _castService);
+    _castService.stopDiscovery();
+    if (device == null || !mounted) return;
+    setState(() => _castBusy = true);
+    try {
+      final session = await _castService.startCasting(
+        device,
+        url: url,
+        title: _info?.filename ?? '',
+        startPosition: _position,
+        duration: _duration,
+      );
+      if (!mounted) {
+        await session.disconnect();
+        return;
+      }
+      _castSession = session;
+      _castDeviceName = device.name;
+      await _castPositionSubscription?.cancel();
+      _castPositionSubscription = session.positionStream.listen((position) {
+        if (!mounted || _castSession == null) return;
+        setState(() => _position = position);
+      });
+      await _controller?.pause();
+      setState(() {});
+      _showCastMessage(l10n.castPlayingOn(device.name));
+    } catch (error) {
+      if (mounted) {
+        _showCastMessage(l10n.castFailed('$error'));
+      }
+    } finally {
+      if (mounted) setState(() => _castBusy = false);
+    }
+  }
+
+  Future<void> _endCastSession() async {
+    final session = _castSession;
+    if (session == null) return;
+    _castSession = null;
+    _castDeviceName = null;
+    await _castPositionSubscription?.cancel();
+    _castPositionSubscription = null;
+    unawaited(_saveHistory());
+    try {
+      await _castService.stopCasting();
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  void _showCastMessage(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   Future<void> _fail(Object error) async {
@@ -678,6 +840,9 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
     _historyTimer?.cancel();
     _keyboardFocusNode.dispose();
     _playButtonFocusNode.dispose();
+    unawaited(_castPositionSubscription?.cancel());
+    unawaited(_castService.dispose());
+    if (_isPictureInPicture) unawaited(_pictureInPictureWindow.exit());
     unawaited(_stopSession());
     unawaited(_disposeController());
     super.dispose();
@@ -692,11 +857,11 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
   @override
   bool get controlsVisible => _controlsVisible;
   @override
-  bool get canvasEditing => false;
+  bool get canvasEditing => _canvasEditing;
   @override
   bool get subtitleControlsVisible => _subtitlePanelVisible;
   @override
-  bool get isPictureInPicture => false;
+  bool get isPictureInPicture => _isPictureInPicture;
   @override
   bool get isFullscreen => false;
   @override
@@ -732,11 +897,13 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
   @override
   void exitFullscreen() {}
   @override
-  void togglePictureInPicture() {}
+  void togglePictureInPicture() => unawaited(_togglePictureInPicture());
   @override
-  void toggleCanvasEditor() {}
+  void toggleCanvasEditor() => _toggleCanvasEditor();
   @override
-  void cancelCanvasEditing() {}
+  void cancelCanvasEditing() {
+    if (mounted) setState(() => _canvasEditing = false);
+  }
   @override
   void toggleSubtitleControls() {
     setState(() => _subtitlePanelVisible = !_subtitlePanelVisible);
@@ -824,11 +991,34 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
         fit: StackFit.expand,
         children: [
           if (controller != null && controller.value.isInitialized)
-            Center(
-              child: AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: VideoPlayer(controller),
-              ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final crop = _canvasCrop;
+                final full = crop.left == 0 &&
+                    crop.top == 0 &&
+                    crop.right == 1 &&
+                    crop.bottom == 1;
+                final player = VideoPlayer(controller);
+                if (full) return Center(child: player);
+                return ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.topLeft,
+                    maxWidth: double.infinity,
+                    maxHeight: double.infinity,
+                    child: Transform.translate(
+                      offset: Offset(
+                        -crop.left * constraints.maxWidth,
+                        -crop.top * constraints.maxHeight,
+                      ),
+                      child: SizedBox(
+                        width: constraints.maxWidth / crop.width,
+                        height: constraints.maxHeight / crop.height,
+                        child: player,
+                      ),
+                    ),
+                  ),
+                );
+              },
             )
           else
             Center(
@@ -851,6 +1041,16 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
                 ],
               ),
             ),
+          if (_canvasEditing &&
+              controller != null &&
+              controller.value.isInitialized)
+            SmartCanvasOverlay(
+              crop: _canvasCrop,
+              sourceAspectRatio: controller.value.aspectRatio,
+              onChanged: (value) => setState(() => _canvasCrop = value),
+              onCommit: _commitCanvasCrop,
+              onCancel: () => setState(() => _canvasEditing = false),
+            ),
           if (_subtitleEnabled && controller != null)
             ClosedCaption(
               text: controller.value.caption.text,
@@ -871,7 +1071,12 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
             playing: _playing,
             buffering: _buffering,
             filename: _info?.filename ?? l10n.videoPreparing,
-            status: '$_status · ${widget.platform.playerBadge}',
+            status: [
+              _status,
+              ?_castDeviceName,
+              if (_castBusy) l10n.castConnecting,
+              widget.platform.playerBadge,
+            ].join(' · '),
             position: _position,
             duration: _duration,
             rate: _rate,
@@ -889,6 +1094,20 @@ class _TvPlayerScreenState extends State<TvPlayerScreen>
             onAudioTrack: (id) => unawaited(_selectAudioTrack(id)),
             onToggleSubtitles: () => unawaited(_toggleSubtitles()),
             onSearchSubtitles: () => unawaited(_openSubtitleSearch()),
+            chapters: _chapters,
+            showChapters: _preferences.showChapters,
+            onChapterTap: (target) => unawaited(_controller?.seekTo(target)),
+            videoFill: _videoFill,
+            onToggleVideoFit: _toggleVideoFit,
+            onToggleCanvas: _toggleCanvasEditor,
+            onTogglePictureInPicture: () => unawaited(_togglePictureInPicture()),
+            pictureInPictureSupported: _pictureInPictureWindow.isSupported,
+            isPictureInPicture: _isPictureInPicture,
+            onToggleCast: () => unawaited(_toggleCast()),
+            castAvailable: (_info?.castUrl.isNotEmpty ?? false),
+            casting: _castSession != null,
+            onEpisodeSwitch: () => unawaited(_switchEpisode()),
+            hasMultipleEpisodes: _entries.length > 1,
           ),
           if (_subtitlePanelVisible) _buildSubtitlePanel(),
           if (_upNext case final next?)
