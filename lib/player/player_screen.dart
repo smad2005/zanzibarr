@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1076,14 +1077,32 @@ class _PlayerScreenState extends State<PlayerScreen>
   @visibleForTesting
   Player get playerForTest => _player;
 
-  void _onPlayerError(String message) {
+  Future<String> _streamHeadDiagnostic() async {
+    final info = _info;
+    if (info == null) return '';
+    final source = _resolvedEntryKey ?? 'auto';
+    try {
+      final response = await http
+          .get(Uri.parse(info.url), headers: {'Range': 'bytes=0-15'})
+          .timeout(const Duration(seconds: 4));
+      final hex = response.bodyBytes
+          .take(16)
+          .map((byte) => byte.toRadixString(16).padLeft(2, '0').toUpperCase())
+          .join(' ');
+      return ' [source=$source http=${response.statusCode} head=$hex]';
+    } catch (error) {
+      return ' [source=$source head-error=$error]';
+    }
+  }
+
+  Future<void> _onPlayerError(String message) async {
     if (!_startupActive && !_playbackReady) return;
     final description = describePlayerError(
       message,
       AppLocalizations.of(context),
     );
     if (!_playbackReady) {
-      _failStartup(description);
+      _failStartup('$description${await _streamHeadDiagnostic()}');
       return;
     }
     if (!mounted) return;

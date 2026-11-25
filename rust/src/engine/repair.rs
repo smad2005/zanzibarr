@@ -156,6 +156,12 @@ impl RepairOverlay {
         self.files.insert(name.to_ascii_lowercase(), overlay);
     }
 
+    fn merge_from(&mut self, other: RepairOverlay) {
+        for (name, overlay) in other.files {
+            self.files.insert(name, overlay);
+        }
+    }
+
     /// NZB yolu için katman dizini: temp/zanzibarr-repair/<özet>.
     pub fn dir_for_nzb(nzb_path: &Path) -> PathBuf {
         let key = sha2::Sha256::digest(nzb_path.to_string_lossy().as_bytes());
@@ -256,23 +262,83 @@ pub async fn repair_release<F: RepairFetcher + 'static>(
     cancellation: Option<watch::Receiver<bool>>,
 ) -> Result<RepairReport, RepairError> {
     ensure_active(&cancellation)?;
-    // 1. Ana dizini ve (gerektikçe) vol dosyalarını yükle.
-    emit(progress, RepairPhase::LoadingPar2, 0, 0, "PAR2 dizini okunuyor");
-    let index_name = par2_names
+    let indexes: Vec<&String> = par2_names
         .iter()
-        .find(|name| !name.to_ascii_lowercase().contains(".vol"))
-        .ok_or(RepairError::NoPar2Index)?;
+        .filter(|name| !name.to_ascii_lowercase().contains(".vol"))
+        .collect();
+    if indexes.is_empty() {
+        return Err(RepairError::NoPar2Index);
+    }
+    emit(progress, RepairPhase::LoadingPar2, 0, 0, "PAR2 dizinleri okunuyor");
+    let mut merged = RepairOverlay::default();
+    let mut verified_files = 0u32;
+    let mut damaged_slices = 0u32;
+    let mut repaired_slices = 0u32;
+    for (set_index, index_name) in indexes.iter().enumerate() {
+        ensure_active(&cancellation)?;
+        let base = index_name
+            .trim_end_matches(".par2")
+            .to_ascii_lowercase();
+        let vols: Vec<&String> = par2_names
+            .iter()
+            .filter(|name| {
+                let lower = name.to_ascii_lowercase();
+                lower.starts_with(&base) && lower.contains(".vol")
+            })
+            .collect();
+        let (verified, damaged, repaired, overlay) =
+            repair_one_set(fetcher, index_name, &vols, progress, &cancellation).await?;
+        verified_files += verified;
+        damaged_slices += damaged;
+        repaired_slices += repaired;
+        if let Some(overlay) = overlay {
+            merged.merge_from(overlay);
+        }
+        emit(
+            progress,
+            RepairPhase::LoadingPar2,
+            (set_index + 1) as u64,
+            indexes.len() as u64,
+            "PAR2 setleri",
+        );
+    }
+    if merged.is_empty() {
+        emit(progress, RepairPhase::Done, 1, 1, "setler temiz");
+        return Ok(RepairReport {
+            verified_files,
+            damaged_slices,
+            repaired_slices: 0,
+            overlay_dir: None,
+        });
+    }
+    emit(progress, RepairPhase::Writing, 0, 0, "writing layer");
+    merged.save(overlay_dir)?;
+    emit(progress, RepairPhase::Done, 1, 1, "repair complete");
+    Ok(RepairReport {
+        verified_files,
+        damaged_slices,
+        repaired_slices,
+        overlay_dir: Some(overlay_dir.to_path_buf()),
+    })
+}
+
+async fn repair_one_set<F: RepairFetcher + 'static>(
+    fetcher: &Arc<F>,
+    index_name: &str,
+    vol_names: &[&String],
+    progress: &RepairProgressFn,
+    cancellation: &Option<watch::Receiver<bool>>,
+) -> Result<(u32, u32, u32, Option<RepairOverlay>), RepairError> {
     let index_bytes = fetcher.read_par2(index_name).await?;
     let mut set = Par2Set::from_parts(&[index_bytes.as_slice()])?;
     let total_bytes: u64 = set.files.iter().map(|f| f.length).sum();
     let done_bytes = AtomicU64::new(0);
 
-    // 2. Doğrulama turu: tüm dilimler IFSC ile karşılaştırılır.
     emit(progress, RepairPhase::Verifying, 0, total_bytes, "verifying slices");
     let mut damaged: Vec<u64> = Vec::new();
     let mut verified_files = 0u32;
     for file in &set.files {
-        ensure_active(&cancellation)?;
+        ensure_active(cancellation)?;
         let health = verify_file(
             fetcher,
             &set,
@@ -280,7 +346,7 @@ pub async fn repair_release<F: RepairFetcher + 'static>(
             progress,
             total_bytes,
             &done_bytes,
-            &cancellation,
+            cancellation,
         )
         .await?;
         let map_first: u64 = set
@@ -298,20 +364,9 @@ pub async fn repair_release<F: RepairFetcher + 'static>(
     }
 
     if damaged.is_empty() {
-        emit(progress, RepairPhase::Done, total_bytes, total_bytes, "set temiz");
-        return Ok(RepairReport {
-            verified_files,
-            damaged_slices: 0,
-            repaired_slices: 0,
-            overlay_dir: None,
-        });
+        return Ok((verified_files, 0, 0, None));
     }
 
-    // 3. Vol dosyalarını yeterli kurtarma dilimi birikene dek oku.
-    let vol_names: Vec<&String> = par2_names
-        .iter()
-        .filter(|name| name.to_ascii_lowercase().contains(".vol"))
-        .collect();
     let mut parts: Vec<Vec<u8>> = vec![index_bytes];
     for vol in vol_names {
         if set.recovery.len() >= damaged.len() {
@@ -323,10 +378,9 @@ pub async fn repair_release<F: RepairFetcher + 'static>(
         set = Par2Set::from_parts(&refs)?;
     }
 
-    // 4. Çöz + onar (yeni hasar keşfiyle sınırlı yeniden denemeyle).
     let mut attempt = 0usize;
     let repaired = loop {
-        ensure_active(&cancellation)?;
+        ensure_active(cancellation)?;
         emit(progress, RepairPhase::Solving, 0, 0, "solving matrix");
         let plan = par2::plan_repair(&set, &damaged)?;
         match run_repair_pass(
@@ -336,7 +390,7 @@ pub async fn repair_release<F: RepairFetcher + 'static>(
             progress,
             &done_bytes,
             total_bytes,
-            &cancellation,
+            cancellation,
         )
         .await
         {
@@ -359,8 +413,6 @@ pub async fn repair_release<F: RepairFetcher + 'static>(
         }
     };
 
-    // 5. Katmanı yaz.
-    emit(progress, RepairPhase::Writing, 0, 0, "writing layer");
     let mut overlay = RepairOverlay::default();
     let map = set.global_slice_map();
     let mut per_file: HashMap<usize, FileOverlay> = HashMap::new();
@@ -384,15 +436,13 @@ pub async fn repair_release<F: RepairFetcher + 'static>(
     for (file_index, file_overlay) in per_file {
         overlay.insert(&set.files[file_index].name, file_overlay);
     }
-    overlay.save(overlay_dir)?;
 
-    emit(progress, RepairPhase::Done, 0, 0, "repair complete");
-    Ok(RepairReport {
+    Ok((
         verified_files,
-        damaged_slices: damaged.len() as u32,
-        repaired_slices: repaired.len() as u32,
-        overlay_dir: Some(overlay_dir.to_path_buf()),
-    })
+        damaged.len() as u32,
+        repaired.len() as u32,
+        Some(overlay),
+    ))
 }
 
 enum RepairPassFailure {
