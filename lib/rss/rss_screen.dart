@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../player/player_screen.dart';
+import '../player/player_launcher.dart';
 import '../src/rust/api/search.dart';
 import 'rss_feed.dart';
 import 'rss_store.dart';
@@ -339,7 +339,9 @@ class _RssScreenState extends State<RssScreen> {
         onDownloaded(path);
       } else {
         await Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => PlayerScreen(nzbPath: path)),
+          MaterialPageRoute<void>(
+            builder: (_) => PlayerLauncher.create(nzbPath: path),
+          ),
         );
       }
     } catch (error) {
